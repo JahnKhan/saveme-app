@@ -7,41 +7,55 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.app.saveme.audio.AudioRecorder
 import com.app.saveme.data.DUMMY_TRANSCRIPTION
+import com.app.saveme.data.DUMMY_AI_RESPONSE
 import com.app.saveme.data.ModelDownloadStatus
 import com.app.saveme.data.ModelImportStatus
 import com.app.saveme.data.ModelState
 import com.app.saveme.model.ModelManager
 import com.app.saveme.storage.FileManager
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private const val TAG = "CameraViewModel"
 
+enum class AppScreen {
+    CAMERA,
+    CHAT
+}
+
 data class CameraUiState(
+    val currentScreen: AppScreen = AppScreen.CAMERA,
+    val hasAllPermissions: Boolean = false,
     val isCapturing: Boolean = false,
     val isRecordingAudio: Boolean = false,
     val recordingDuration: Float = 0f,
     val audioAmplitude: Int = 0,
     val lastCapturedImage: Bitmap? = null,
     val statusMessage: String = "",
-    val showPermissionDialog: Boolean = false,
-    val hasAllPermissions: Boolean = false,
     val modelState: ModelState = ModelState.NOT_DOWNLOADED,
     val downloadStatus: ModelDownloadStatus = ModelDownloadStatus(),
     val importStatus: ModelImportStatus = ModelImportStatus(),
-    val llmResponse: String = ""
+    val llmResponse: String = "",
+    val isStreamingResponse: Boolean = false,
+    val isProcessingImage: Boolean = false // Add this to prevent rapid captures
 )
 
 class CameraViewModel : ViewModel() {
-    
+
     private val _uiState = MutableStateFlow(CameraUiState())
     val uiState: StateFlow<CameraUiState> = _uiState.asStateFlow()
-    
+
     private val audioRecorder = AudioRecorder()
     private val fileManager = FileManager()
     private var modelManager: ModelManager? = null
+    
+    // Track ongoing inference job to properly cancel it
+    private var inferenceJob: Job? = null
     
     fun initializeModelManager(context: Context) {
         if (modelManager == null) {
@@ -112,38 +126,43 @@ class CameraViewModel : ViewModel() {
     }
     
     private fun loadModel() {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.Default) { // Move to background thread
             _uiState.value = _uiState.value.copy(
                 statusMessage = "Loading AI model..."
             )
-            
+
             val success = modelManager?.loadModel() ?: false
-            if (success) {
-                _uiState.value = _uiState.value.copy(
-                    statusMessage = "AI model loaded successfully!"
-                )
-                // Clear message after delay
-                kotlinx.coroutines.delay(2000)
-                if (_uiState.value.statusMessage.contains("loaded successfully")) {
-                    _uiState.value = _uiState.value.copy(statusMessage = "")
+            
+            // Update UI on main thread
+            withContext(Dispatchers.Main) {
+                if (success) {
+                    _uiState.value = _uiState.value.copy(
+                        statusMessage = "AI model loaded successfully!"
+                    )
+                    // Clear message after delay
+                    viewModelScope.launch {
+                        kotlinx.coroutines.delay(2000)
+                        if (_uiState.value.statusMessage.contains("loaded successfully")) {
+                            _uiState.value = _uiState.value.copy(statusMessage = "")
+                        }
+                    }
+                } else {
+                    _uiState.value = _uiState.value.copy(
+                        statusMessage = "Failed to load AI model"
+                    )
                 }
-            } else {
-                _uiState.value = _uiState.value.copy(
-                    statusMessage = "Failed to load AI model"
-                )
             }
         }
     }
     
     fun updatePermissionStatus(hasPermissions: Boolean) {
         _uiState.value = _uiState.value.copy(
-            hasAllPermissions = hasPermissions,
-            showPermissionDialog = !hasPermissions
+            hasAllPermissions = hasPermissions
         )
     }
     
     fun dismissPermissionDialog() {
-        _uiState.value = _uiState.value.copy(showPermissionDialog = false)
+        // This function can be removed as we no longer use a permission dialog in the state
     }
     
     fun onPhotoCaptured(context: Context, bitmap: Bitmap) {
@@ -245,48 +264,131 @@ class CameraViewModel : ViewModel() {
     }
     
     private fun processData(context: Context) {
-        viewModelScope.launch {
+        // Prevent multiple rapid captures
+        if (_uiState.value.isProcessingImage) {
+            Log.d(TAG, "Already processing an image, ignoring new request")
+            return
+        }
+        
+        // Cancel any previous inference job
+        inferenceJob?.cancel()
+        
+        inferenceJob = viewModelScope.launch(Dispatchers.Default) {
             val capturedImage = _uiState.value.lastCapturedImage
             
-            if (_uiState.value.modelState == ModelState.LOADED && capturedImage != null) {
-                // Use AI model for analysis
-                _uiState.value = _uiState.value.copy(
-                    statusMessage = "Analyzing image with AI..."
-                )
+            Log.d(TAG, "processData called - modelState: ${_uiState.value.modelState}, hasImage: ${capturedImage != null}")
+            
+            if (capturedImage != null && (_uiState.value.modelState == ModelState.LOADED || 
+                _uiState.value.modelState == ModelState.INITIALIZING)) {
                 
-                val prompt = DUMMY_TRANSCRIPTION  // Just use the question "what is visible?"
-                val response = modelManager?.generateResponse(prompt, capturedImage)
-                
-                if (response != null) {
+                // Update UI on main thread first
+                withContext(Dispatchers.Main) {
                     _uiState.value = _uiState.value.copy(
-                        isCapturing = false,
+                        statusMessage = "Preparing AI analysis...",
+                        isCapturing = true,
                         isRecordingAudio = false,
-                        recordingDuration = 0f,
-                        audioAmplitude = 0,
-                        llmResponse = response,
-                        statusMessage = "AI Analysis Complete!"
+                        isProcessingImage = true // Set processing flag
                     )
                     
-                    Log.d(TAG, "AI Analysis: $response")
-                } else {
-                    // Fallback to dummy transcription
-                    processDummyData()
+                    // Switch to chat screen immediately
+                    switchToChatScreen()
+                }
+                
+                // Wait for model to be ready if it's still initializing
+                Log.d(TAG, "Waiting for model to be ready...")
+                val modelReady = modelManager?.waitForModelReady() ?: false
+                
+                if (!modelReady) {
+                    Log.e(TAG, "Model not ready, falling back to dummy data")
+                    withContext(Dispatchers.Main) {
+                        _uiState.value = _uiState.value.copy(isProcessingImage = false)
+                        processDummyData()
+                    }
+                    return@launch
+                }
+                
+                // Model is ready, proceed with AI analysis
+                Log.d(TAG, "Model is ready, starting AI analysis...")
+                
+                try {
+                    val startTime = System.currentTimeMillis()
+                    val prompt = DUMMY_TRANSCRIPTION
+                    
+                    Log.d(TAG, "Starting streaming inference with prompt: '$prompt'")
+                    
+                    // Start streaming - update UI state to show we're streaming
+                    withContext(Dispatchers.Main) {
+                        _uiState.value = _uiState.value.copy(
+                            llmResponse = "",
+                            isStreamingResponse = true,
+                            statusMessage = "Analyzing with AI..."
+                        )
+                    }
+                    
+                    val result = modelManager?.generateResponseStreaming(
+                        prompt = prompt,
+                        imageBitmap = capturedImage,
+                        onTokenReceived = { token, isComplete ->
+                            // Only update UI if we're still on chat screen and job is active
+                            if (inferenceJob?.isActive == true && _uiState.value.currentScreen == AppScreen.CHAT) {
+                                viewModelScope.launch(Dispatchers.Main) {
+                                    val currentResponse = _uiState.value.llmResponse
+                                    _uiState.value = _uiState.value.copy(
+                                        llmResponse = currentResponse + token,
+                                        isStreamingResponse = !isComplete
+                                    )
+                                    
+                                    if (isComplete) {
+                                        Log.d(TAG, "Streaming completed")
+                                        _uiState.value = _uiState.value.copy(
+                                            isCapturing = false,
+                                            isRecordingAudio = false,
+                                            recordingDuration = 0f,
+                                            audioAmplitude = 0,
+                                            statusMessage = "",
+                                            isProcessingImage = false // Clear processing flag
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    )
+                    
+                    val inferenceEndTime = System.currentTimeMillis()
+                    Log.d(TAG, "Total streaming time: ${inferenceEndTime - startTime}ms")
+                    Log.d(TAG, "Final result: '$result'")
+                    
+                } catch (e: Exception) {
+                    Log.e(TAG, "AI inference failed", e)
+                    // Update UI on main thread
+                    if (inferenceJob?.isActive == true) {
+                        withContext(Dispatchers.Main) {
+                            _uiState.value = _uiState.value.copy(
+                                isCapturing = false,
+                                isRecordingAudio = false,
+                                recordingDuration = 0f,
+                                audioAmplitude = 0,
+                                llmResponse = DUMMY_AI_RESPONSE,
+                                isStreamingResponse = false,
+                                statusMessage = "",
+                                isProcessingImage = false // Clear processing flag
+                            )
+                        }
+                    }
                 }
             } else {
-                // Fallback to dummy transcription if model not loaded
-                processDummyData()
-            }
-            
-            // Clear status message after delay
-            kotlinx.coroutines.delay(5000)
-            if (_uiState.value.statusMessage.contains("Complete") || _uiState.value.statusMessage.contains("completed")) {
-                _uiState.value = _uiState.value.copy(statusMessage = "")
+                Log.d(TAG, "Using dummy data - modelState: ${_uiState.value.modelState}, hasImage: ${capturedImage != null}")
+                // Fallback to dummy transcription if model not ready
+                withContext(Dispatchers.Main) {
+                    _uiState.value = _uiState.value.copy(isProcessingImage = false)
+                    processDummyData()
+                }
             }
         }
     }
     
     private fun processDummyData() {
-        Log.d(TAG, "Processing captured data...")
+        Log.d(TAG, "Processing captured data with dummy transcription...")
         Log.d(TAG, "Dummy transcription: $DUMMY_TRANSCRIPTION")
         
         _uiState.value = _uiState.value.copy(
@@ -294,13 +396,77 @@ class CameraViewModel : ViewModel() {
             isRecordingAudio = false,
             recordingDuration = 0f,
             audioAmplitude = 0,
-            llmResponse = DUMMY_TRANSCRIPTION,
-            statusMessage = "Capture completed! Transcription: \"$DUMMY_TRANSCRIPTION\""
+            llmResponse = DUMMY_AI_RESPONSE,
+            statusMessage = ""  // Clear status message since we show the response
         )
+        
+        Log.d(TAG, "UI updated with dummy response: $DUMMY_AI_RESPONSE")
     }
     
     fun clearStatusMessage() {
         _uiState.value = _uiState.value.copy(statusMessage = "")
+    }
+    
+    fun clearLlmResponse() {
+        _uiState.value = _uiState.value.copy(
+            llmResponse = "",
+            isStreamingResponse = false
+        )
+    }
+    
+    fun switchToCameraScreen() {
+        Log.d(TAG, "Switching to camera screen...")
+        
+        // Cancel any ongoing AI inference job immediately
+        inferenceJob?.cancel()
+        inferenceJob = null
+        
+        // Stop the inference at MediaPipe level immediately
+        modelManager?.stopInference()
+        
+        // Update UI state immediately to prevent further operations
+        _uiState.value = _uiState.value.copy(
+            currentScreen = AppScreen.CAMERA,
+            llmResponse = "",
+            isStreamingResponse = false,
+            isCapturing = false,
+            isRecordingAudio = false,
+            recordingDuration = 0f,
+            audioAmplitude = 0,
+            statusMessage = "",
+            isProcessingImage = false // Clear processing flag when switching back
+        )
+        
+        // Reset session in background with proper error handling
+        viewModelScope.launch(Dispatchers.Default) {
+            try {
+                Log.d(TAG, "Resetting session in background...")
+                modelManager?.resetSession()
+                Log.d(TAG, "Session reset completed successfully")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error resetting session in background", e)
+                // Try one more time if first attempt fails
+                try {
+                    kotlinx.coroutines.delay(500)
+                    modelManager?.resetSession()
+                    Log.d(TAG, "Session reset completed on retry")
+                } catch (e2: Exception) {
+                    Log.e(TAG, "Session reset failed even on retry", e2)
+                }
+            }
+        }
+        
+        Log.d(TAG, "Switched to camera screen and interrupted any ongoing operations")
+    }
+    
+    fun switchToChatScreen() {
+        _uiState.value = _uiState.value.copy(
+            currentScreen = AppScreen.CHAT,
+            isCapturing = false,
+            isRecordingAudio = false,
+            recordingDuration = 0f,
+            audioAmplitude = 0
+        )
     }
     
     fun enableVisionSupport() {
@@ -310,6 +476,12 @@ class CameraViewModel : ViewModel() {
     
     override fun onCleared() {
         super.onCleared()
+        
+        // Cancel any ongoing inference
+        inferenceJob?.cancel()
+        
+        // Stop inference and clean up model
+        modelManager?.stopInference()
         modelManager?.cleanup()
     }
 } 

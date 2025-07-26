@@ -18,4 +18,7 @@ const val AUDIO_FILE_PREFIX = "saveme_audio_"
 const val FILE_DATE_FORMAT = "yyyyMMdd_HHmmss"
 
 // Dummy transcription text
-const val DUMMY_TRANSCRIPTION = "what is visible?" 
+const val DUMMY_TRANSCRIPTION = "what is visible?"
+
+// Dummy AI response for testing
+const val DUMMY_AI_RESPONSE = "I can see a camera view with various objects in the scene. This is a test response from the AI model to demonstrate that the image analysis is working properly." 

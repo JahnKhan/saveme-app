@@ -226,6 +226,23 @@ fun ModelDownloadScreen(
                         }
                     }
                     
+                    ModelState.INITIALIZING -> {
+                        Column(
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(48.dp)
+                            )
+                            
+                            Spacer(modifier = Modifier.height(16.dp))
+                            
+                            Text(
+                                text = "Initializing Model...",
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
+                    
                     ModelState.LOADED -> {
                         Text(
                             text = "✓ Model Ready",

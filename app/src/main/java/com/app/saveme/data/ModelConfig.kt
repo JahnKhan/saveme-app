@@ -3,8 +3,8 @@ package com.app.saveme.data
 // Default Gemma 3B model configuration
 object ModelConfig {
     const val DEFAULT_MODEL_NAME = "gemma-3n-E2B-it-int4"
-    const val DEFAULT_MODEL_URL = "https://huggingface.co/google/gemma-3n-E2B-it-litert-preview/resolve/main/gemma-3n-E2B-it-int4.task"
-    
+    //const val DEFAULT_MODEL_URL = "https://huggingface.co/google/gemma-3n-E2B-it-litert-preview/resolve/main/gemma-3n-E2B-it-int4.task"
+    const val DEFAULT_MODEL_URL ="https://gemma3n.s3.eu-central-1.amazonaws.com/gemma3n.task"
     // Configurable model URL - change this to use different models
     var CURRENT_MODEL_URL = DEFAULT_MODEL_URL
     var CURRENT_MODEL_NAME = DEFAULT_MODEL_NAME
@@ -72,8 +72,9 @@ data class ModelImportStatus(
 enum class ModelState {
     NOT_DOWNLOADED,
     DOWNLOADING,
-    DOWNLOADED,
     IMPORTING,
+    DOWNLOADED,
+    INITIALIZING,  // Add this state
     LOADING,
     LOADED,
     ERROR
