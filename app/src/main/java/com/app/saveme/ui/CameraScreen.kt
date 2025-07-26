@@ -226,14 +226,12 @@ fun CameraScreen(
                     }
                     
                     AppScreen.CHAT -> {
-                        // Chat interface
                         ChatScreen(
                             capturedImage = uiState.lastCapturedImage,
                             llmResponse = uiState.llmResponse,
-                            isStreamingResponse = uiState.isStreamingResponse,
-                            onNewCaptureClicked = {
-                                viewModel.switchToCameraScreen()
-                            }
+                            isProcessing = uiState.isProcessingImage,
+                            onNewCaptureClicked = { viewModel.switchToCameraScreen() },
+                            onCancelClicked = { viewModel.cancelInference() }
                         )
                     }
                 }

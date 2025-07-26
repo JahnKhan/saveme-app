@@ -331,180 +331,67 @@ class ModelManager(private val context: Context) {
         }
     }
     
-    suspend fun generateResponse(prompt: String, imageBitmap: Bitmap? = null): String? {
-        if (_modelState.value != ModelState.LOADED || modelInstance == null) {
-            Log.e(TAG, "Model not loaded")
-            return null
-        }
-        
-        return try {
-            Log.d(TAG, "Generating response for prompt: $prompt")
-            Log.d(TAG, "Vision support: ${ModelConfig.SUPPORTS_VISION}, Image provided: ${imageBitmap != null}")
-            
-            val instance = modelInstance!!
-            val session = instance.session
-            
-            // Add text query
-            if (prompt.trim().isNotEmpty()) {
-                session.addQueryChunk(prompt)
-            }
-            
-            // Add image only if both model supports vision and image is provided
-            if (ModelConfig.SUPPORTS_VISION && imageBitmap != null) {
-                val image = BitmapImageBuilder(imageBitmap).build()
-                session.addImage(image)
-                Log.d(TAG, "Added image to session")
-            } else if (imageBitmap != null && !ModelConfig.SUPPORTS_VISION) {
-                Log.w(TAG, "Image provided but model doesn't support vision - skipping image")
-            }
-            
-            // Generate response asynchronously and collect streaming results
-            val result = suspendCancellableCoroutine<String> { continuation ->
-                var fullResponse = ""
-                var lastUpdateTime = System.currentTimeMillis()
-                
-                Log.d(TAG, "Setting up callback for generateResponseAsync...")
-                
-                val callback = { partialResult: String, done: Boolean ->
-                    Log.d(TAG, "Callback called - done: $done, new token(s): '$partialResult'")
-                    
-                    // Concatenate each new token/chunk to build the full response (like gallery project)
-                    fullResponse += partialResult
-                    Log.d(TAG, "Full response so far: '$fullResponse'")
-                    
-                    lastUpdateTime = System.currentTimeMillis()
-                    
-                    if (done && continuation.isActive) {
-                        Log.d(TAG, "Final response complete (done=true): '$fullResponse'")
-                        continuation.resume(fullResponse)
-                    }
-                }
-                
-                Log.d(TAG, "Calling session.generateResponseAsync...")
-                session.generateResponseAsync(callback)
-                
-                // Monitor for response completion
-                GlobalScope.launch {
-                    while (continuation.isActive) {
-                        delay(1000) // Check every second
-                        val timeSinceLastUpdate = System.currentTimeMillis() - lastUpdateTime
-                        
-                        // If no updates for 3 seconds and we have a response, return it
-                        if (timeSinceLastUpdate > 3000 && fullResponse.isNotBlank()) {
-                            Log.d(TAG, "No updates for 3 seconds, returning current response: '$fullResponse'")
-                            continuation.resume(fullResponse)
-                            break
-                        }
-                        
-                        // Hard timeout after 30 seconds
-                        if (timeSinceLastUpdate > 30000) {
-                            Log.w(TAG, "Hard timeout reached, returning: '$fullResponse'")
-                            continuation.resume(fullResponse)
-                            break
-                        }
-                    }
-                }
-            }
-            
-            Log.d(TAG, "Generated response: $result")
-            result
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to generate response", e)
-            null
-        }
-    }
-    
     suspend fun generateResponseStreaming(
-        prompt: String, 
+        prompt: String,
         imageBitmap: Bitmap? = null,
         onTokenReceived: (token: String, isComplete: Boolean) -> Unit
     ): String? {
         if (_modelState.value != ModelState.LOADED || modelInstance == null) {
             Log.e(TAG, "Model not loaded")
+            onTokenReceived("", true)
             return null
         }
-        
+
         return try {
-            Log.d(TAG, "Generating streaming response for prompt: $prompt")
-            Log.d(TAG, "Vision support: ${ModelConfig.SUPPORTS_VISION}, Image provided: ${imageBitmap != null}")
-            
-            val instance = modelInstance!!
-            
-            // Always reset session before new inference to ensure it's clean
-            Log.d(TAG, "Resetting session before inference to ensure clean state...")
+            // Always reset the session before a new inference to ensure a clean context.
+            // This prevents the "Input is too long for the model to process" error.
             resetSession()
-            
-            // Wait a bit for reset to complete
-            kotlinx.coroutines.delay(50)
-            
-            // Get the fresh session
-            val currentSession = modelInstance?.session
-            if (currentSession == null) {
-                Log.e(TAG, "Session is null after reset")
-                return null
-            }
-            
-            // Add text query
+
+            val instance = modelInstance!!
+            val currentSession = instance.session
+
             if (prompt.trim().isNotEmpty()) {
                 currentSession.addQueryChunk(prompt)
             }
-            
-            // Add image only if both model supports vision and image is provided
+
             if (ModelConfig.SUPPORTS_VISION && imageBitmap != null) {
                 val image = BitmapImageBuilder(imageBitmap).build()
                 currentSession.addImage(image)
-                Log.d(TAG, "Added image to session")
-            } else if (imageBitmap != null && !ModelConfig.SUPPORTS_VISION) {
-                Log.w(TAG, "Image provided but model doesn't support vision - skipping image")
             }
-            
-            // Generate response asynchronously with streaming
-            val result = suspendCancellableCoroutine<String> { continuation ->
+
+            suspendCancellableCoroutine<String> { continuation ->
                 var fullResponse = ""
-                
-                Log.d(TAG, "Setting up streaming callback...")
-                
                 val callback = { partialResult: String, done: Boolean ->
-                    Log.d(TAG, "Token received - done: $done, token: '$partialResult'")
-                    
-                    // Add each new token to the full response
-                    fullResponse += partialResult
-                    
-                    // Call the UI callback for each token (streaming)
-                    onTokenReceived(partialResult, done)
-                    
-                    if (done && continuation.isActive) {
-                        Log.d(TAG, "Streaming complete: '$fullResponse'")
-                        continuation.resume(fullResponse)
+                    if (continuation.isActive) {
+                        fullResponse += partialResult
+                        onTokenReceived(partialResult, done)
+                        if (done) {
+                            continuation.resume(fullResponse)
+                        }
                     }
                 }
-                
-                Log.d(TAG, "Starting streaming inference...")
+
+                continuation.invokeOnCancellation {
+                    Log.d(TAG, "invokeOnCancellation: coroutine was cancelled.")
+                }
+
                 currentSession.generateResponseAsync(callback)
             }
-            
-            Log.d(TAG, "Final streaming result: $result")
-            result
-            
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to generate streaming response", e)
-            onTokenReceived("", true) // Signal completion even on error
+            Log.e(TAG, "generateResponseStreaming failed", e)
+            onTokenReceived("Error: ${e.localizedMessage}", true) // Ensure UI is unlocked on error
             null
         }
     }
     
     fun stopInference() {
         Log.d(TAG, "Stopping ongoing inference...")
-        try {
-            val instance = modelInstance
-            if (instance != null) {
-                instance.session.cancelGenerateResponseAsync()
-                Log.d(TAG, "Inference cancelled successfully")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error stopping inference", e)
-        }
+        
+        // Prevent concurrent cancellation calls
+        // This function is no longer needed as inference is blocking
+        // The UI will handle screen switching and inference cancellation.
+        // This function is kept for now, but its logic needs to be re-evaluated
+        // if the UI is truly blocking inference.
     }
     
     fun isModelDownloaded(): Boolean {
@@ -525,53 +412,36 @@ class ModelManager(private val context: Context) {
     }
     
     fun resetSession() {
+        if (modelInstance == null) {
+            Log.d(TAG, "Model not initialized, skipping session reset.")
+            return
+        }
+        Log.d(TAG, "Resetting session...")
+
         try {
-            Log.d(TAG, "Resetting session...")
-            val instance = modelInstance ?: return
-            
-            // Close current session first
-            try {
-                instance.session.close()
-            } catch (e: Exception) {
-                Log.w(TAG, "Error closing old session: ${e.message}")
-            }
-            
-            // Create new session with retry logic (like gallery project)
-            var retryCount = 0
-            val maxRetries = 3
-            
-            while (retryCount < maxRetries) {
-                try {
-                    val newSession = LlmInferenceSession.createFromOptions(
-                        instance.engine,
-                        LlmInferenceSession.LlmInferenceSessionOptions.builder()
-                            .setTopK(40)
-                            .setTopP(0.9f)
-                            .setTemperature(0.8f)
-                            .setGraphOptions(
-                                GraphOptions.builder()
-                                    .setEnableVisionModality(ModelConfig.SUPPORTS_VISION)
-                                    .build()
-                            )
+            val instance = modelInstance!!
+            // Close the old session. This will interrupt any ongoing generateResponseAsync call.
+            instance.session.close()
+
+            // Create a new session with the same engine and options
+            val newSession = LlmInferenceSession.createFromOptions(
+                instance.engine,
+                LlmInferenceSession.LlmInferenceSessionOptions.builder()
+                    .setTopK(40)
+                    .setTopP(0.9f)
+                    .setTemperature(0.8f)
+                    .setGraphOptions(
+                        GraphOptions.builder()
+                            .setEnableVisionModality(ModelConfig.SUPPORTS_VISION)
                             .build()
                     )
-                    
-                    instance.session = newSession
-                    Log.d(TAG, "Session reset completed successfully")
-                    return
-                    
-                } catch (e: Exception) {
-                    retryCount++
-                    Log.w(TAG, "Failed to reset session (attempt $retryCount/$maxRetries): ${e.message}")
-                    if (retryCount < maxRetries) {
-                        kotlinx.coroutines.runBlocking { kotlinx.coroutines.delay(200) }
-                    }
-                }
-            }
-            
-            Log.e(TAG, "Failed to reset session after $maxRetries attempts")
+                    .build()
+            )
+            instance.session = newSession
+            Log.d(TAG, "Session reset successfully.")
         } catch (e: Exception) {
-            Log.e(TAG, "Critical error during session reset", e)
+            Log.e(TAG, "Failed to reset session", e)
+            _modelState.value = ModelState.ERROR
         }
     }
     
