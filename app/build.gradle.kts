@@ -62,6 +62,16 @@ dependencies {
     // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
     
+    // MediaPipe for LLM inference
+    implementation(libs.mediapipe.tasks.text)
+    implementation(libs.mediapipe.tasks.genai)
+    
+    // Work Manager for downloads
+    implementation(libs.androidx.work.runtime)
+    
+    // JSON parsing
+    implementation(libs.gson)
+    
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

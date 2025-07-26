@@ -12,6 +12,10 @@ cameraX = "1.4.2"
 hilt = "2.51.1"
 hiltNavigation = "1.1.0"
 materialIconExtended = "1.6.8"
+mediapipeTasksText = "0.10.21"
+mediapipeTasksGenai = "0.10.25"
+workRuntime = "2.10.0"
+gson = "2.12.1"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -42,6 +46,16 @@ hilt-android-compiler = { module = "com.google.dagger:hilt-android-compiler", ve
 
 # Material Icons Extended
 material-icon-extended = { group = "androidx.compose.material", name = "material-icons-extended", version.ref = "materialIconExtended" }
+
+# MediaPipe for local LLM inference
+mediapipe-tasks-text = { group = "com.google.mediapipe", name = "tasks-text", version.ref = "mediapipeTasksText" }
+mediapipe-tasks-genai = { group = "com.google.mediapipe", name = "tasks-genai", version.ref = "mediapipeTasksGenai" }
+
+# Work Manager for downloads
+androidx-work-runtime = { group = "androidx.work", name = "work-runtime-ktx", version.ref = "workRuntime" }
+
+# JSON parsing
+gson = { group = "com.google.code.gson", name = "gson", version.ref = "gson" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

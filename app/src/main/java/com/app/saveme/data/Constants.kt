@@ -18,4 +18,4 @@ const val AUDIO_FILE_PREFIX = "saveme_audio_"
 const val FILE_DATE_FORMAT = "yyyyMMdd_HHmmss"
 
 // Dummy transcription text
-const val DUMMY_TRANSCRIPTION = "This is a dummy transcription of the recorded audio." 
+const val DUMMY_TRANSCRIPTION = "what is visible?" 

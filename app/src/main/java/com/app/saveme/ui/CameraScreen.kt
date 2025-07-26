@@ -39,8 +39,10 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.app.saveme.data.ModelState
 import com.app.saveme.ui.components.AudioRecordingIndicator
 import com.app.saveme.ui.components.CameraPreview
+import com.app.saveme.ui.components.ModelDownloadScreen
 import com.app.saveme.utils.PermissionUtils
 
 @Composable
@@ -53,6 +55,11 @@ fun CameraScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     
     var captureFunction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    
+    // Initialize model manager
+    LaunchedEffect(Unit) {
+        viewModel.initializeModelManager(context)
+    }
     
     // Permission launcher
     val permissionLauncher = rememberLauncherForActivityResult(
@@ -80,93 +87,110 @@ fun CameraScreen(
     }
     
     Box(modifier = modifier.fillMaxSize()) {
-        if (uiState.hasAllPermissions) {
-            // Camera preview (show only when not recording audio)
-            if (!uiState.isRecordingAudio) {
-                CameraPreview(
-                    onImageCaptured = { bitmap ->
-                        viewModel.onPhotoCaptured(context, bitmap)
-                    },
-                    onCaptureReady = { captureFunc ->
-                        captureFunction = captureFunc
-                    }
-                )
-            }
-            
-            // Show captured image as background during audio recording
-            if (uiState.isRecordingAudio) {
-                val capturedImage = uiState.lastCapturedImage
-                if (capturedImage != null) {
-                    Image(
-                        bitmap = capturedImage.asImageBitmap(),
-                        contentDescription = "Captured Image",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
-                    
-                    // Add semi-transparent overlay to make the recording indicators more visible
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .background(Color.Black.copy(alpha = 0.3f))
+        when {
+            !uiState.hasAllPermissions -> {
+                // Show permission required message
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(MaterialTheme.colorScheme.background)
+                        .padding(16.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = "Camera and microphone permissions are required to use this app.",
+                        style = MaterialTheme.typography.headlineSmall,
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                 }
             }
             
-            // Audio recording indicator
-            AudioRecordingIndicator(
-                isRecording = uiState.isRecordingAudio,
-                duration = uiState.recordingDuration,
-                amplitude = uiState.audioAmplitude,
-                modifier = Modifier.align(Alignment.TopCenter)
-            )
-            
-            // Capture button
-            FloatingActionButton(
-                onClick = {
-                    if (uiState.isCapturing) {
-                        // Stop audio recording if in progress
-                        if (uiState.isRecordingAudio) {
-                            viewModel.stopAudioRecording(context)
-                        }
-                    } else {
-                        // Capture photo
-                        captureFunction?.invoke()
-                    }
-                },
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(32.dp)
-                    .size(80.dp)
-                    .border(
-                        4.dp,
-                        Color.White,
-                        CircleShape
-                    ),
-                containerColor = if (uiState.isCapturing) Color.Red else MaterialTheme.colorScheme.primary,
-                contentColor = Color.White
-            ) {
-                Icon(
-                    imageVector = if (uiState.isRecordingAudio) Icons.Rounded.Stop else Icons.Rounded.PhotoCamera,
-                    contentDescription = if (uiState.isRecordingAudio) "Stop Recording" else "Capture",
-                    modifier = Modifier.size(36.dp)
+            uiState.modelState in listOf(ModelState.NOT_DOWNLOADED, ModelState.DOWNLOADING, ModelState.IMPORTING, ModelState.ERROR) -> {
+                // Show model download screen
+                ModelDownloadScreen(
+                    modelState = uiState.modelState,
+                    downloadStatus = uiState.downloadStatus,
+                    importStatus = uiState.importStatus,
+                    onStartDownload = { viewModel.startModelDownload() },
+                    onRetryDownload = { viewModel.retryModelDownload() },
+                    onImportModel = { uri, fileName -> viewModel.importModel(uri, fileName) }
                 )
             }
-        } else {
-            // Show permission required message
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(MaterialTheme.colorScheme.background)
-                    .padding(16.dp),
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.Center
-            ) {
-                Text(
-                    text = "Camera and microphone permissions are required to use this app.",
-                    style = MaterialTheme.typography.headlineSmall,
-                    color = MaterialTheme.colorScheme.onBackground
+            
+            else -> {
+                // Show camera interface when model is ready
+                // Camera preview (show only when not recording audio)
+                if (!uiState.isRecordingAudio) {
+                    CameraPreview(
+                        onImageCaptured = { bitmap ->
+                            viewModel.onPhotoCaptured(context, bitmap)
+                        },
+                        onCaptureReady = { captureFunc ->
+                            captureFunction = captureFunc
+                        }
+                    )
+                }
+                
+                // Show captured image as background during audio recording
+                if (uiState.isRecordingAudio) {
+                    val capturedImage = uiState.lastCapturedImage
+                    if (capturedImage != null) {
+                        Image(
+                            bitmap = capturedImage.asImageBitmap(),
+                            contentDescription = "Captured Image",
+                            modifier = Modifier.fillMaxSize(),
+                            contentScale = ContentScale.Crop
+                        )
+                        
+                        // Add semi-transparent overlay to make the recording indicators more visible
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(Color.Black.copy(alpha = 0.3f))
+                        )
+                    }
+                }
+                
+                // Audio recording indicator
+                AudioRecordingIndicator(
+                    isRecording = uiState.isRecordingAudio,
+                    duration = uiState.recordingDuration,
+                    amplitude = uiState.audioAmplitude,
+                    modifier = Modifier.align(Alignment.TopCenter)
                 )
+                
+                // Capture button
+                FloatingActionButton(
+                    onClick = {
+                        if (uiState.isCapturing) {
+                            // Stop audio recording if in progress
+                            if (uiState.isRecordingAudio) {
+                                viewModel.stopAudioRecording(context)
+                            }
+                        } else {
+                            // Capture photo
+                            captureFunction?.invoke()
+                        }
+                    },
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(32.dp)
+                        .size(80.dp)
+                        .border(
+                            4.dp,
+                            Color.White,
+                            CircleShape
+                        ),
+                    containerColor = if (uiState.isCapturing) Color.Red else MaterialTheme.colorScheme.primary,
+                    contentColor = Color.White
+                ) {
+                    Icon(
+                        imageVector = if (uiState.isRecordingAudio) Icons.Rounded.Stop else Icons.Rounded.PhotoCamera,
+                        contentDescription = if (uiState.isRecordingAudio) "Stop Recording" else "Capture",
+                        modifier = Modifier.size(36.dp)
+                    )
+                }
             }
         }
         
