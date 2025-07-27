@@ -71,6 +71,8 @@ fun CameraScreen(
     // Initialize model manager
     LaunchedEffect(Unit) {
         viewModel.initializeModelManager(context)
+        // Refresh download status to sync with any ongoing downloads
+        viewModel.refreshDownloadStatus()
     }
     
     // Permission launcher

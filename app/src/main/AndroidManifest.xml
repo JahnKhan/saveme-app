@@ -7,6 +7,10 @@
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- Second iteration: INTERNET permission only needed for model downloads -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- Notification permission for foreground download service -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Foreground service permission for Android 14+ -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
 
     <!-- Camera hardware requirement -->
     <uses-feature
@@ -33,6 +37,12 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        
+        <!-- Foreground service for WorkManager downloads -->
+        <service
+            android:name="androidx.work.impl.foreground.SystemForegroundService"
+            android:foregroundServiceType="dataSync"
+            tools:node="merge" />
     </application>
 
 </manifest>

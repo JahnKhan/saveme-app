@@ -93,12 +93,31 @@ class CameraViewModel : ViewModel() {
     
     fun startModelDownload() {
         viewModelScope.launch {
-            modelManager?.downloadModel()
+            try {
+                modelManager?.downloadModel()
+            } catch (e: Exception) {
+                Log.e("CameraViewModel", "Failed to start download: ${e.message}", e)
+                _uiState.value = _uiState.value.copy(
+                    statusMessage = "Failed to start download: ${e.message}"
+                )
+            }
         }
     }
     
     fun retryModelDownload() {
         startModelDownload()
+    }
+    
+    fun validateAndCleanupModels() {
+        modelManager?.validateAndCleanupModels()
+    }
+    
+    fun debugModelDirectory(): String {
+        return modelManager?.debugModelDirectory() ?: "ModelManager not initialized"
+    }
+    
+    fun refreshDownloadStatus() {
+        modelManager?.refreshDownloadStatus()
     }
     
     fun importModel(uri: android.net.Uri, fileName: String) {
