@@ -540,8 +540,16 @@ class ModelManager(private val context: Context) {
             val instance = modelInstance!!
             val currentSession = instance.session
 
-            if (prompt.trim().isNotEmpty()) {
-                currentSession.addQueryChunk(prompt)
+            val fileManager = com.app.saveme.storage.FileManager()
+            val contextText = fileManager.readContext(context)
+            val fullPrompt = if (contextText != null) {
+                "$contextText\n\n$prompt"
+            } else {
+                prompt
+            }
+
+            if (fullPrompt.trim().isNotEmpty()) {
+                currentSession.addQueryChunk(fullPrompt)
             }
 
             if (ModelConfig.SUPPORTS_VISION && imageBitmap != null) {

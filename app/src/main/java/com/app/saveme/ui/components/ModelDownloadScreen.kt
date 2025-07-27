@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -48,25 +49,28 @@ fun ModelDownloadScreen(
     onStartDownload: () -> Unit,
     onRetryDownload: () -> Unit,
     onImportModel: (Uri, String) -> Unit,
+    loadDigitalTwin: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     // State to track if user is in import mode
     var showImportMode by remember { mutableStateOf(false) }
-    
+    var showTokenMode by remember { mutableStateOf(false) }
+    var token by remember { mutableStateOf("") }
+
     // File picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { selectedUri ->
             // Extract filename from URI
-            val fileName = selectedUri.lastPathSegment?.substringAfterLast('/') 
+            val fileName = selectedUri.lastPathSegment?.substringAfterLast('/')
                 ?: "imported_model.task"
             onImportModel(selectedUri, fileName)
         }
         // If uri is null (user cancelled), reset to main options
         showImportMode = false
     }
-    
+
     Column(
         modifier = modifier
             .fillMaxSize()
@@ -88,27 +92,27 @@ fun ModelDownloadScreen(
                     modifier = Modifier.size(64.dp),
                     tint = MaterialTheme.colorScheme.primary
                 )
-                
+
                 Spacer(modifier = Modifier.height(16.dp))
-                
+
                 Text(
                     text = "AI Model Required",
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
                     textAlign = TextAlign.Center
                 )
-                
+
                 Spacer(modifier = Modifier.height(8.dp))
-                
+
                 Text(
                     text = "Download the Gemma 3n model (with vision support) or import your own .task model file to enable AI-powered analysis.",
                     style = MaterialTheme.typography.bodyMedium,
                     textAlign = TextAlign.Center,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
-                
+
                 Spacer(modifier = Modifier.height(24.dp))
-                
+
                 when (modelState) {
                     ModelState.NOT_DOWNLOADED -> {
                         if (showImportMode) {
@@ -122,18 +126,18 @@ fun ModelDownloadScreen(
                                     fontWeight = FontWeight.Bold,
                                     textAlign = TextAlign.Center
                                 )
-                                
+
                                 Spacer(modifier = Modifier.height(16.dp))
-                                
+
                                 Text(
                                     text = "Select a .task model file from your device storage. Make sure the file is a compatible LLM model.",
                                     style = MaterialTheme.typography.bodyMedium,
                                     textAlign = TextAlign.Center,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                
+
                                 Spacer(modifier = Modifier.height(24.dp))
-                                
+
                                 Button(
                                     onClick = { filePickerLauncher.launch("*/*") },
                                     modifier = Modifier.fillMaxWidth()
@@ -146,14 +150,44 @@ fun ModelDownloadScreen(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("Select File from Device")
                                 }
-                                
+
                                 Spacer(modifier = Modifier.height(12.dp))
-                                
+
                                 OutlinedButton(
                                     onClick = { showImportMode = false },
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
                                     Text("Cancel - Back to Download")
+                                }
+                            }
+                        } else if (showTokenMode) {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                OutlinedTextField(
+                                    value = token,
+                                    onValueChange = { token = it },
+                                    label = { Text("Enter Token") },
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                                Spacer(modifier = Modifier.height(12.dp))
+                                Button(
+                                    onClick = {
+                                        if (token.isNotEmpty()) {
+                                            loadDigitalTwin(token)
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth(),
+                                    enabled = token.isNotEmpty()
+                                ) {
+                                    Text("Load Digital Twin")
+                                }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                OutlinedButton(
+                                    onClick = { showTokenMode = false },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Cancel")
                                 }
                             }
                         } else {
@@ -167,17 +201,17 @@ fun ModelDownloadScreen(
                                 ) {
                                     Text("Download Model (~3GB)")
                                 }
-                                
+
                                 Spacer(modifier = Modifier.height(12.dp))
-                                
+
                                 Text(
                                     text = "OR",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
-                                
+
                                 Spacer(modifier = Modifier.height(12.dp))
-                                
+
                                 OutlinedButton(
                                     onClick = { showImportMode = true },
                                     modifier = Modifier.fillMaxWidth()
@@ -190,10 +224,17 @@ fun ModelDownloadScreen(
                                     Spacer(modifier = Modifier.width(8.dp))
                                     Text("Import Model File (.task)")
                                 }
+                                Spacer(modifier = Modifier.height(12.dp))
+                                OutlinedButton(
+                                    onClick = { showTokenMode = true },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Load Digital Twin")
+                                }
                             }
                         }
                     }
-                    
+
                     ModelState.DOWNLOADING -> {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally
@@ -202,26 +243,26 @@ fun ModelDownloadScreen(
                                 progress = { downloadStatus.progress },
                                 modifier = Modifier.size(48.dp)
                             )
-                            
+
                             Spacer(modifier = Modifier.height(16.dp))
-                            
+
                             LinearProgressIndicator(
                                 progress = { downloadStatus.progress },
                                 modifier = Modifier.fillMaxWidth()
                             )
-                            
+
                             Spacer(modifier = Modifier.height(8.dp))
-                            
+
                             Text(
                                 text = "${(downloadStatus.progress * 100).roundToInt()}%",
                                 style = MaterialTheme.typography.bodyMedium,
                                 fontWeight = FontWeight.Medium
                             )
-                            
+
                             if (downloadStatus.totalBytes > 0) {
                                 val downloadedMB = downloadStatus.downloadedBytes / (1024 * 1024)
                                 val totalMB = downloadStatus.totalBytes / (1024 * 1024)
-                                
+
                                 Text(
                                     text = "$downloadedMB MB / $totalMB MB",
                                     style = MaterialTheme.typography.bodySmall,
@@ -230,7 +271,7 @@ fun ModelDownloadScreen(
                             }
                         }
                     }
-                    
+
                     ModelState.IMPORTING -> {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally
@@ -239,16 +280,16 @@ fun ModelDownloadScreen(
                                 progress = { importStatus.progress },
                                 modifier = Modifier.size(48.dp)
                             )
-                            
+
                             Spacer(modifier = Modifier.height(16.dp))
-                            
+
                             LinearProgressIndicator(
                                 progress = { importStatus.progress },
                                 modifier = Modifier.fillMaxWidth()
                             )
-                            
+
                             Spacer(modifier = Modifier.height(8.dp))
-                            
+
                             Text(
                                 text = "Importing Model...",
                                 style = MaterialTheme.typography.bodyMedium,
@@ -256,7 +297,7 @@ fun ModelDownloadScreen(
                             )
                         }
                     }
-                    
+
                     ModelState.DOWNLOADED -> {
                         Text(
                             text = "✓ Model Ready",
@@ -265,7 +306,7 @@ fun ModelDownloadScreen(
                             fontWeight = FontWeight.Medium
                         )
                     }
-                    
+
                     ModelState.LOADING -> {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally
@@ -273,16 +314,16 @@ fun ModelDownloadScreen(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(48.dp)
                             )
-                            
+
                             Spacer(modifier = Modifier.height(16.dp))
-                            
+
                             Text(
                                 text = "Loading Model...",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
                     }
-                    
+
                     ModelState.INITIALIZING -> {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally
@@ -290,16 +331,16 @@ fun ModelDownloadScreen(
                             CircularProgressIndicator(
                                 modifier = Modifier.size(48.dp)
                             )
-                            
+
                             Spacer(modifier = Modifier.height(16.dp))
-                            
+
                             Text(
                                 text = "Initializing Model...",
                                 style = MaterialTheme.typography.bodyMedium
                             )
                         }
                     }
-                    
+
                     ModelState.LOADED -> {
                         Text(
                             text = "✓ Model Ready",
@@ -308,20 +349,20 @@ fun ModelDownloadScreen(
                             fontWeight = FontWeight.Medium
                         )
                     }
-                    
+
                     ModelState.ERROR -> {
                         Column(
                             horizontalAlignment = Alignment.CenterHorizontally
                         ) {
                             val errorMessage = downloadStatus.errorMessage ?: importStatus.errorMessage
-                            
+
                             Text(
                                 text = "❌ Error",
                                 style = MaterialTheme.typography.bodyLarge,
                                 color = MaterialTheme.colorScheme.error,
                                 fontWeight = FontWeight.Medium
                             )
-                            
+
                             if (errorMessage != null) {
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
@@ -331,9 +372,9 @@ fun ModelDownloadScreen(
                                     textAlign = TextAlign.Center
                                 )
                             }
-                            
+
                             Spacer(modifier = Modifier.height(16.dp))
-                            
+
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
@@ -343,7 +384,7 @@ fun ModelDownloadScreen(
                                 ) {
                                     Text("Retry Download")
                                 }
-                                
+
                                 OutlinedButton(
                                     onClick = { filePickerLauncher.launch("*/*") },
                                     modifier = Modifier.weight(1f)

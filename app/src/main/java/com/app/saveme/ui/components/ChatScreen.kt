@@ -24,6 +24,7 @@ import com.app.saveme.ui.components.CaptureButton
 fun ChatScreen(
     capturedImage: Bitmap?,
     llmResponse: String,
+    userPrompt: String,
     isProcessing: Boolean,
     onNewCaptureClicked: () -> Unit,
     onCancelClicked: () -> Unit,
@@ -101,7 +102,10 @@ fun ChatScreen(
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
                     Text("You", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                    Text("What is visible?", style = MaterialTheme.typography.bodyMedium)
+                    Text(
+                        text = userPrompt.ifEmpty { "What do you see?" }, 
+                        style = MaterialTheme.typography.bodyMedium
+                    )
                 }
             }
             

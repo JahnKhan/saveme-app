@@ -42,7 +42,9 @@ data class CameraUiState(
     val importStatus: ModelImportStatus = ModelImportStatus(),
     val llmResponse: String = "",
     val isStreamingResponse: Boolean = false,
-    val isProcessingImage: Boolean = false // Add this to prevent rapid captures
+    val isProcessingImage: Boolean = false, // Add this to prevent rapid captures
+    val isLoadingDigitalTwin: Boolean = false,
+    val userPrompt: String = ""
 )
 
 class CameraViewModel : ViewModel() {
@@ -53,6 +55,14 @@ class CameraViewModel : ViewModel() {
     private val audioRecorder = AudioRecorder()
     private val fileManager = FileManager()
     private var modelManager: ModelManager? = null
+    
+    private val digitalTwinApiService by lazy {
+        val retrofit = retrofit2.Retrofit.Builder()
+            .baseUrl("https://save-me.app/")
+            .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
+            .build()
+        retrofit.create(com.app.saveme.data.DigitalTwinApiService::class.java)
+    }
     
     // Track ongoing inference job to properly cancel it
     private var inferenceJob: Job? = null
@@ -91,6 +101,30 @@ class CameraViewModel : ViewModel() {
         }
     }
     
+    fun loadDigitalTwin(token: String, context: Context) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingDigitalTwin = true, statusMessage = "Loading Digital Twin...")
+            try {
+                val response = digitalTwinApiService.getDigitalTwin(token)
+                fileManager.saveContext(context, response.text)
+                _uiState.value = _uiState.value.copy(
+                    isLoadingDigitalTwin = false,
+                    statusMessage = "Digital Twin loaded successfully!"
+                )
+                // Clear message after delay
+                kotlinx.coroutines.delay(3000)
+                if (_uiState.value.statusMessage.contains("Digital Twin loaded successfully")) {
+                    _uiState.value = _uiState.value.copy(statusMessage = "")
+                }
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoadingDigitalTwin = false,
+                    statusMessage = "Failed to load Digital Twin: ${e.message}"
+                )
+            }
+        }
+    }
+
     fun startModelDownload() {
         viewModelScope.launch {
             try {
@@ -285,7 +319,10 @@ class CameraViewModel : ViewModel() {
     private fun processData(context: Context) {
         if (_uiState.value.isProcessingImage) return
 
-        _uiState.value = _uiState.value.copy(isProcessingImage = true)
+        _uiState.value = _uiState.value.copy(
+            isProcessingImage = true,
+            userPrompt = DUMMY_TRANSCRIPTION
+        )
         switchToChatScreen()
 
         inferenceJob = viewModelScope.launch(Dispatchers.Default) {
@@ -375,7 +412,8 @@ class CameraViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(
             currentScreen = AppScreen.CAMERA,
             llmResponse = "",
-            isStreamingResponse = false
+            isStreamingResponse = false,
+            userPrompt = ""
         )
     }
 
