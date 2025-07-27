@@ -71,6 +71,8 @@ fun CameraScreen(
     // Initialize model manager
     LaunchedEffect(Unit) {
         viewModel.initializeModelManager(context)
+        // Refresh download status to sync with any ongoing downloads
+        viewModel.refreshDownloadStatus()
     }
     
     // Permission launcher
@@ -226,14 +228,12 @@ fun CameraScreen(
                     }
                     
                     AppScreen.CHAT -> {
-                        // Chat interface
                         ChatScreen(
                             capturedImage = uiState.lastCapturedImage,
                             llmResponse = uiState.llmResponse,
-                            isStreamingResponse = uiState.isStreamingResponse,
-                            onNewCaptureClicked = {
-                                viewModel.switchToCameraScreen()
-                            }
+                            isProcessing = uiState.isProcessingImage,
+                            onNewCaptureClicked = { viewModel.switchToCameraScreen() },
+                            onCancelClicked = { viewModel.cancelInference() }
                         )
                     }
                 }

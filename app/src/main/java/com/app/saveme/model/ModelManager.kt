@@ -37,6 +37,7 @@ import kotlin.coroutines.resume
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import androidx.work.OutOfQuotaPolicy
 
 private const val TAG = "ModelManager"
 private const val MODEL_DOWNLOAD_WORK = "model_download_work"
@@ -59,10 +60,53 @@ class ModelManager(private val context: Context) {
     
     init {
         checkModelStatus()
+        checkOngoingDownloads()
         observeDownloadProgress()
     }
     
+    private fun checkOngoingDownloads() {
+        try {
+            // Check if there are any ongoing download work requests
+            val workInfos = workManager.getWorkInfosForUniqueWork(MODEL_DOWNLOAD_WORK).get()
+            
+            val ongoingWork = workInfos.filter { workInfo ->
+                workInfo.state == WorkInfo.State.RUNNING || workInfo.state == WorkInfo.State.ENQUEUED
+            }
+            
+            if (ongoingWork.isNotEmpty()) {
+                Log.d(TAG, "Found ${ongoingWork.size} ongoing download(s)")
+                _modelState.value = ModelState.DOWNLOADING
+                _downloadStatus.value = ModelDownloadStatus(isDownloading = true)
+                return
+            }
+            
+            // Also check for substantial temp files which might indicate an ongoing download
+            val modelsDir = File(context.getExternalFilesDir(null), ModelConfig.MODELS_DIR)
+            if (modelsDir.exists()) {
+                val tempFiles = modelsDir.listFiles { file ->
+                    file.name.endsWith(".tmp") && file.length() > 10 * 1024 * 1024 // > 10MB
+                }
+                
+                if (!tempFiles.isNullOrEmpty()) {
+                    val tempFile = tempFiles.first()
+                    Log.d(TAG, "Found substantial temp file: ${tempFile.name} (${tempFile.length()} bytes)")
+                    Log.d(TAG, "This might indicate an interrupted download - setting state to NOT_DOWNLOADED for retry")
+                    // Don't set to DOWNLOADING state since WorkManager isn't running
+                    // Let the user retry the download instead
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error checking ongoing downloads: ${e.message}", e)
+        }
+    }
+    
     private fun checkModelStatus() {
+        // If we're already downloading, don't change the state
+        if (_modelState.value == ModelState.DOWNLOADING) {
+            Log.d(TAG, "Download already in progress, skipping model file check")
+            return
+        }
+        
         // Check if we have any model file in the models directory
         val modelsDir = File(context.getExternalFilesDir(null), ModelConfig.MODELS_DIR)
         
@@ -72,35 +116,126 @@ class ModelManager(private val context: Context) {
             }
             
             if (!existingModels.isNullOrEmpty()) {
-                // Found existing model(s), use the first one
+                // Found existing model(s), validate the first one
                 val existingModel = existingModels.first()
                 val modelName = existingModel.nameWithoutExtension
                 
-                Log.d(TAG, "Detected model name: '$modelName'")
+                Log.d(TAG, "Found model file: ${existingModel.absolutePath}")
+                Log.d(TAG, "File size: ${existingModel.length()} bytes")
                 
-                // Update configuration to use the existing model
-                ModelConfig.CURRENT_MODEL_NAME = modelName
-                
-                // Enhanced vision support detection
-                val supportsVision = modelName.contains("gemma-3n", ignoreCase = true) || 
-                                   modelName.contains("vision", ignoreCase = true) ||
-                                   modelName.contains("multimodal", ignoreCase = true) ||
-                                   modelName.contains("E2B", ignoreCase = true) ||
-                                   modelName.contains("E4B", ignoreCase = true)
-                
-                ModelConfig.SUPPORTS_VISION = supportsVision
-                
-                _modelState.value = ModelState.DOWNLOADED
-                Log.d(TAG, "Found existing model: ${existingModel.absolutePath}")
-                Log.d(TAG, "Model name: '$modelName'")
-                Log.d(TAG, "Model vision support: ${ModelConfig.SUPPORTS_VISION}")
-                return
+                // Validate the model file
+                if (isValidModelFile(existingModel)) {
+                    Log.d(TAG, "Model file validation passed")
+                    
+                    // Update configuration to use the existing model
+                    ModelConfig.CURRENT_MODEL_NAME = modelName
+                    
+                    // Enhanced vision support detection
+                    val supportsVision = modelName.contains("gemma-3n", ignoreCase = true) || 
+                                       modelName.contains("vision", ignoreCase = true) ||
+                                       modelName.contains("multimodal", ignoreCase = true) ||
+                                       modelName.contains("E2B", ignoreCase = true) ||
+                                       modelName.contains("E4B", ignoreCase = true)
+                    
+                    ModelConfig.SUPPORTS_VISION = supportsVision
+                    
+                    _modelState.value = ModelState.DOWNLOADED
+                    Log.d(TAG, "Model ready: $modelName (vision: ${ModelConfig.SUPPORTS_VISION})")
+                    return
+                } else {
+                    Log.w(TAG, "Model file validation failed, cleaning up corrupt file")
+                    cleanupCorruptModel(existingModel)
+                }
             }
         }
         
-        // No existing model found
+        // No existing valid model found
         _modelState.value = ModelState.NOT_DOWNLOADED
-        Log.d(TAG, "No existing model found, needs to be downloaded or imported")
+        Log.d(TAG, "No valid model found, needs to be downloaded or imported")
+    }
+    
+    private fun isValidModelFile(modelFile: File): Boolean {
+        try {
+            Log.d(TAG, "Validating model file: ${modelFile.absolutePath}")
+            
+            // Basic file validation
+            if (!modelFile.exists()) {
+                Log.w(TAG, "Model file does not exist")
+                return false
+            }
+            
+            val fileSize = modelFile.length()
+            Log.d(TAG, "Model file size: $fileSize bytes")
+            
+            if (fileSize < 1024 * 1024) { // Less than 1MB is definitely too small
+                Log.w(TAG, "Model file too small: $fileSize bytes")
+                return false
+            }
+            
+            // Check if file is readable
+            if (!modelFile.canRead()) {
+                Log.w(TAG, "Model file is not readable")
+                return false
+            }
+            
+            // For gemma-3n model, expect around 3GB
+            if (modelFile.name.contains("gemma-3n")) {
+                val expectedSize = 3136226711L // Known size
+                val sizeDifference = Math.abs(fileSize - expectedSize)
+                val tolerance = expectedSize * 0.05 // 5% tolerance (same as download)
+                
+                Log.d(TAG, "Gemma-3n size validation - Expected: $expectedSize, Actual: $fileSize, Difference: $sizeDifference, Tolerance: $tolerance")
+                
+                if (sizeDifference > tolerance) {
+                    Log.w(TAG, "Model file size mismatch. Expected: ~$expectedSize, Actual: $fileSize")
+                    return false
+                } else {
+                    Log.d(TAG, "Gemma-3n size validation passed")
+                }
+            }
+            
+            // Try to read the first few bytes to ensure file is not corrupt
+            try {
+                modelFile.inputStream().use { stream ->
+                    val buffer = ByteArray(1024)
+                    val bytesRead = stream.read(buffer)
+                    if (bytesRead <= 0) {
+                        Log.w(TAG, "Cannot read from model file")
+                        return false
+                    }
+                    Log.d(TAG, "Successfully read $bytesRead bytes from model file")
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Error reading model file: ${e.message}")
+                return false
+            }
+            
+            Log.d(TAG, "Model file validation passed completely")
+            return true
+        } catch (e: Exception) {
+            Log.e(TAG, "Error validating model file: ${e.message}", e)
+            return false
+        }
+    }
+    
+    private fun cleanupCorruptModel(modelFile: File) {
+        try {
+            if (modelFile.exists()) {
+                val deleted = modelFile.delete()
+                Log.d(TAG, "Corrupt model file deletion: ${if (deleted) "successful" else "failed"}")
+            }
+            
+            // Also clean up any partial downloads or temp files
+            val modelsDir = modelFile.parentFile
+            modelsDir?.listFiles()?.forEach { file ->
+                if (file.name.endsWith(".tmp") || file.name.endsWith(".partial")) {
+                    file.delete()
+                    Log.d(TAG, "Cleaned up temp file: ${file.name}")
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error cleaning up corrupt model: ${e.message}", e)
+        }
     }
     
     private fun getModelFile(): File {
@@ -115,11 +250,14 @@ class ModelManager(private val context: Context) {
         return File(modelsDir, "${ModelConfig.CURRENT_MODEL_NAME}${ModelConfig.MODEL_FILE_EXTENSION}")
     }
     
-    fun downloadModel(modelUrl: String? = null, modelName: String? = null) {
+    suspend fun downloadModel(modelUrl: String? = null, modelName: String? = null) {
         val url = modelUrl ?: ModelConfig.CURRENT_MODEL_URL
         val name = modelName ?: ModelConfig.CURRENT_MODEL_NAME
         
         Log.d(TAG, "Starting model download: $name from $url")
+        
+        // Clean up any corrupt or partial files before starting
+        cleanupPartialDownloads()
         
         // Update configuration if custom URL provided
         if (modelUrl != null && modelName != null) {
@@ -127,7 +265,10 @@ class ModelManager(private val context: Context) {
         }
         
         val constraints = Constraints.Builder()
-            .setRequiredNetworkType(NetworkType.CONNECTED)
+            .setRequiredNetworkType(NetworkType.NOT_REQUIRED)
+            .setRequiresBatteryNotLow(false)
+            .setRequiresCharging(false)  // Don't require charging
+            .setRequiresDeviceIdle(false)  // Don't require device to be idle
             .build()
         
         val inputData = workDataOf(
@@ -138,16 +279,43 @@ class ModelManager(private val context: Context) {
         val downloadRequest = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
             .setConstraints(constraints)
             .setInputData(inputData)
+            .setExpedited(OutOfQuotaPolicy.RUN_AS_NON_EXPEDITED_WORK_REQUEST)  // Try expedited, fallback to normal
             .build()
         
         workManager.enqueueUniqueWork(
             MODEL_DOWNLOAD_WORK,
-            ExistingWorkPolicy.REPLACE,
+            ExistingWorkPolicy.REPLACE, // Replace any existing work
             downloadRequest
         )
         
         _modelState.value = ModelState.DOWNLOADING
-        _downloadStatus.value = ModelDownloadStatus(isDownloading = true)
+    }
+    
+    private fun cleanupPartialDownloads() {
+        try {
+            val modelsDir = File(context.getExternalFilesDir(null), ModelConfig.MODELS_DIR)
+            if (modelsDir.exists()) {
+                modelsDir.listFiles()?.forEach { file ->
+                    when {
+                        file.name.endsWith(".tmp") -> {
+                            file.delete()
+                            Log.d(TAG, "Cleaned up temp file: ${file.name}")
+                        }
+                        file.name.endsWith(".partial") -> {
+                            file.delete()
+                            Log.d(TAG, "Cleaned up partial file: ${file.name}")
+                        }
+                        file.name.endsWith(ModelConfig.MODEL_FILE_EXTENSION) && file.length() < 1024 * 1024 * 50 -> {
+                            // Delete any .task files smaller than 50MB (likely incomplete)
+                            file.delete()
+                            Log.d(TAG, "Cleaned up incomplete model file: ${file.name}")
+                        }
+                    }
+                }
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Error cleaning up partial downloads: ${e.message}", e)
+        }
     }
     
     suspend fun importModel(uri: Uri, fileName: String): Boolean {
@@ -241,27 +409,49 @@ class ModelManager(private val context: Context) {
                                 totalBytes = totalBytes
                             )
                             
-                            Log.d(TAG, "Download progress: ${progressPercent.toInt()}%")
+                            Log.d(TAG, "Download progress: ${progressPercent.toInt()}% (${downloadedBytes / 1024 / 1024}MB / ${totalBytes / 1024 / 1024}MB)")
                         }
                         
                         WorkInfo.State.SUCCEEDED -> {
+                            Log.d(TAG, "WorkManager reports download SUCCEEDED")
+                            
                             _downloadStatus.value = ModelDownloadStatus(
                                 isDownloading = false,
                                 progress = 1f,
                                 isCompleted = true
                             )
                             _modelState.value = ModelState.DOWNLOADED
-                            Log.d(TAG, "Model download completed successfully")
+                            
+                            // Re-validate the model after successful download
+                            checkModelStatus()
+                            
+                            Log.d(TAG, "Model download completed successfully, validation triggered")
                         }
                         
                         WorkInfo.State.FAILED -> {
                             val errorMessage = info.outputData.getString(ModelDownloadWorker.KEY_ERROR_MESSAGE)
+                            
+                            // Clean up any partial files after failure
+                            cleanupPartialDownloads()
+                            
                             _downloadStatus.value = ModelDownloadStatus(
                                 isDownloading = false,
                                 errorMessage = errorMessage ?: "Download failed"
                             )
                             _modelState.value = ModelState.ERROR
                             Log.e(TAG, "Model download failed: $errorMessage")
+                            Log.d(TAG, "Cleaned up partial files after download failure")
+                        }
+                        
+                        WorkInfo.State.CANCELLED -> {
+                            // Handle cancelled downloads
+                            cleanupPartialDownloads()
+                            _downloadStatus.value = ModelDownloadStatus(
+                                isDownloading = false,
+                                errorMessage = "Download was cancelled"
+                            )
+                            _modelState.value = ModelState.NOT_DOWNLOADED
+                            Log.d(TAG, "Model download was cancelled, cleaned up partial files")
                         }
                         
                         else -> {
@@ -331,247 +521,117 @@ class ModelManager(private val context: Context) {
         }
     }
     
-    suspend fun generateResponse(prompt: String, imageBitmap: Bitmap? = null): String? {
-        if (_modelState.value != ModelState.LOADED || modelInstance == null) {
-            Log.e(TAG, "Model not loaded")
-            return null
-        }
-        
-        return try {
-            Log.d(TAG, "Generating response for prompt: $prompt")
-            Log.d(TAG, "Vision support: ${ModelConfig.SUPPORTS_VISION}, Image provided: ${imageBitmap != null}")
-            
-            val instance = modelInstance!!
-            val session = instance.session
-            
-            // Add text query
-            if (prompt.trim().isNotEmpty()) {
-                session.addQueryChunk(prompt)
-            }
-            
-            // Add image only if both model supports vision and image is provided
-            if (ModelConfig.SUPPORTS_VISION && imageBitmap != null) {
-                val image = BitmapImageBuilder(imageBitmap).build()
-                session.addImage(image)
-                Log.d(TAG, "Added image to session")
-            } else if (imageBitmap != null && !ModelConfig.SUPPORTS_VISION) {
-                Log.w(TAG, "Image provided but model doesn't support vision - skipping image")
-            }
-            
-            // Generate response asynchronously and collect streaming results
-            val result = suspendCancellableCoroutine<String> { continuation ->
-                var fullResponse = ""
-                var lastUpdateTime = System.currentTimeMillis()
-                
-                Log.d(TAG, "Setting up callback for generateResponseAsync...")
-                
-                val callback = { partialResult: String, done: Boolean ->
-                    Log.d(TAG, "Callback called - done: $done, new token(s): '$partialResult'")
-                    
-                    // Concatenate each new token/chunk to build the full response (like gallery project)
-                    fullResponse += partialResult
-                    Log.d(TAG, "Full response so far: '$fullResponse'")
-                    
-                    lastUpdateTime = System.currentTimeMillis()
-                    
-                    if (done && continuation.isActive) {
-                        Log.d(TAG, "Final response complete (done=true): '$fullResponse'")
-                        continuation.resume(fullResponse)
-                    }
-                }
-                
-                Log.d(TAG, "Calling session.generateResponseAsync...")
-                session.generateResponseAsync(callback)
-                
-                // Monitor for response completion
-                GlobalScope.launch {
-                    while (continuation.isActive) {
-                        delay(1000) // Check every second
-                        val timeSinceLastUpdate = System.currentTimeMillis() - lastUpdateTime
-                        
-                        // If no updates for 3 seconds and we have a response, return it
-                        if (timeSinceLastUpdate > 3000 && fullResponse.isNotBlank()) {
-                            Log.d(TAG, "No updates for 3 seconds, returning current response: '$fullResponse'")
-                            continuation.resume(fullResponse)
-                            break
-                        }
-                        
-                        // Hard timeout after 30 seconds
-                        if (timeSinceLastUpdate > 30000) {
-                            Log.w(TAG, "Hard timeout reached, returning: '$fullResponse'")
-                            continuation.resume(fullResponse)
-                            break
-                        }
-                    }
-                }
-            }
-            
-            Log.d(TAG, "Generated response: $result")
-            result
-            
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to generate response", e)
-            null
-        }
-    }
-    
     suspend fun generateResponseStreaming(
-        prompt: String, 
+        prompt: String,
         imageBitmap: Bitmap? = null,
         onTokenReceived: (token: String, isComplete: Boolean) -> Unit
     ): String? {
         if (_modelState.value != ModelState.LOADED || modelInstance == null) {
             Log.e(TAG, "Model not loaded")
+            onTokenReceived("", true)
             return null
         }
-        
+
         return try {
-            Log.d(TAG, "Generating streaming response for prompt: $prompt")
-            Log.d(TAG, "Vision support: ${ModelConfig.SUPPORTS_VISION}, Image provided: ${imageBitmap != null}")
-            
-            val instance = modelInstance!!
-            
-            // Always reset session before new inference to ensure it's clean
-            Log.d(TAG, "Resetting session before inference to ensure clean state...")
+            // Always reset the session before a new inference to ensure a clean context.
+            // This prevents the "Input is too long for the model to process" error.
             resetSession()
-            
-            // Wait a bit for reset to complete
-            kotlinx.coroutines.delay(50)
-            
-            // Get the fresh session
-            val currentSession = modelInstance?.session
-            if (currentSession == null) {
-                Log.e(TAG, "Session is null after reset")
-                return null
-            }
-            
-            // Add text query
+
+            val instance = modelInstance!!
+            val currentSession = instance.session
+
             if (prompt.trim().isNotEmpty()) {
                 currentSession.addQueryChunk(prompt)
             }
-            
-            // Add image only if both model supports vision and image is provided
+
             if (ModelConfig.SUPPORTS_VISION && imageBitmap != null) {
                 val image = BitmapImageBuilder(imageBitmap).build()
                 currentSession.addImage(image)
-                Log.d(TAG, "Added image to session")
-            } else if (imageBitmap != null && !ModelConfig.SUPPORTS_VISION) {
-                Log.w(TAG, "Image provided but model doesn't support vision - skipping image")
             }
-            
-            // Generate response asynchronously with streaming
-            val result = suspendCancellableCoroutine<String> { continuation ->
+
+            suspendCancellableCoroutine<String> { continuation ->
                 var fullResponse = ""
-                
-                Log.d(TAG, "Setting up streaming callback...")
-                
                 val callback = { partialResult: String, done: Boolean ->
-                    Log.d(TAG, "Token received - done: $done, token: '$partialResult'")
-                    
-                    // Add each new token to the full response
-                    fullResponse += partialResult
-                    
-                    // Call the UI callback for each token (streaming)
-                    onTokenReceived(partialResult, done)
-                    
-                    if (done && continuation.isActive) {
-                        Log.d(TAG, "Streaming complete: '$fullResponse'")
-                        continuation.resume(fullResponse)
+                    if (continuation.isActive) {
+                        fullResponse += partialResult
+                        onTokenReceived(partialResult, done)
+                        if (done) {
+                            continuation.resume(fullResponse)
+                        }
                     }
                 }
-                
-                Log.d(TAG, "Starting streaming inference...")
+
+                continuation.invokeOnCancellation {
+                    Log.d(TAG, "invokeOnCancellation: coroutine was cancelled.")
+                }
+
                 currentSession.generateResponseAsync(callback)
             }
-            
-            Log.d(TAG, "Final streaming result: $result")
-            result
-            
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to generate streaming response", e)
-            onTokenReceived("", true) // Signal completion even on error
+            Log.e(TAG, "generateResponseStreaming failed", e)
+            onTokenReceived("Error: ${e.localizedMessage}", true) // Ensure UI is unlocked on error
             null
         }
     }
-    
+
     fun stopInference() {
         Log.d(TAG, "Stopping ongoing inference...")
-        try {
-            val instance = modelInstance
-            if (instance != null) {
-                instance.session.cancelGenerateResponseAsync()
-                Log.d(TAG, "Inference cancelled successfully")
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error stopping inference", e)
-        }
+
+        // Prevent concurrent cancellation calls
+        // This function is no longer needed as inference is blocking
+        // The UI will handle screen switching and inference cancellation.
+        // This function is kept for now, but its logic needs to be re-evaluated
+        // if the UI is truly blocking inference.
     }
-    
+
     fun isModelDownloaded(): Boolean {
         val modelsDir = File(context.getExternalFilesDir(null), ModelConfig.MODELS_DIR)
-        
+
         if (modelsDir.exists()) {
             val existingModels = modelsDir.listFiles { file ->
                 file.isFile && file.name.endsWith(ModelConfig.MODEL_FILE_EXTENSION)
             }
             return !existingModels.isNullOrEmpty()
         }
-        
+
         return false
     }
-    
+
     fun isModelLoaded(): Boolean {
         return _modelState.value == ModelState.LOADED
     }
     
     fun resetSession() {
+        if (modelInstance == null) {
+            Log.d(TAG, "Model not initialized, skipping session reset.")
+            return
+        }
+        Log.d(TAG, "Resetting session...")
+
         try {
-            Log.d(TAG, "Resetting session...")
-            val instance = modelInstance ?: return
-            
-            // Close current session first
-            try {
-                instance.session.close()
-            } catch (e: Exception) {
-                Log.w(TAG, "Error closing old session: ${e.message}")
-            }
-            
-            // Create new session with retry logic (like gallery project)
-            var retryCount = 0
-            val maxRetries = 3
-            
-            while (retryCount < maxRetries) {
-                try {
-                    val newSession = LlmInferenceSession.createFromOptions(
-                        instance.engine,
-                        LlmInferenceSession.LlmInferenceSessionOptions.builder()
-                            .setTopK(40)
-                            .setTopP(0.9f)
-                            .setTemperature(0.8f)
-                            .setGraphOptions(
-                                GraphOptions.builder()
-                                    .setEnableVisionModality(ModelConfig.SUPPORTS_VISION)
-                                    .build()
-                            )
+            val instance = modelInstance!!
+            // Close the old session. This will interrupt any ongoing generateResponseAsync call.
+            instance.session.close()
+
+            // Create a new session with the same engine and options
+            val newSession = LlmInferenceSession.createFromOptions(
+                instance.engine,
+                LlmInferenceSession.LlmInferenceSessionOptions.builder()
+                    .setTopK(40)
+                    .setTopP(0.9f)
+                    .setTemperature(0.8f)
+                    .setGraphOptions(
+                        GraphOptions.builder()
+                            .setEnableVisionModality(ModelConfig.SUPPORTS_VISION)
                             .build()
                     )
-                    
-                    instance.session = newSession
-                    Log.d(TAG, "Session reset completed successfully")
-                    return
-                    
-                } catch (e: Exception) {
-                    retryCount++
-                    Log.w(TAG, "Failed to reset session (attempt $retryCount/$maxRetries): ${e.message}")
-                    if (retryCount < maxRetries) {
-                        kotlinx.coroutines.runBlocking { kotlinx.coroutines.delay(200) }
-                    }
-                }
-            }
-            
-            Log.e(TAG, "Failed to reset session after $maxRetries attempts")
+                    .build()
+            )
+            instance.session = newSession
+            Log.d(TAG, "Session reset successfully.")
         } catch (e: Exception) {
-            Log.e(TAG, "Critical error during session reset", e)
+            Log.e(TAG, "Failed to reset session", e)
+            _modelState.value = ModelState.ERROR
         }
     }
     
@@ -623,5 +683,83 @@ class ModelManager(private val context: Context) {
             }
         }
         modelInstance = null
+    }
+
+    fun validateAndCleanupModels() {
+        try {
+            Log.d(TAG, "Manual model validation and cleanup requested")
+            
+            // First clean up any obvious partial downloads
+            cleanupPartialDownloads()
+            
+            // Then recheck model status which will validate existing models
+            checkModelStatus()
+            
+            Log.d(TAG, "Model validation and cleanup completed")
+        } catch (e: Exception) {
+            Log.e(TAG, "Error during manual validation and cleanup: ${e.message}", e)
+        }
+    }
+    
+    fun debugModelDirectory(): String {
+        val modelsDir = File(context.getExternalFilesDir(null), ModelConfig.MODELS_DIR)
+        val debug = StringBuilder()
+        
+        debug.append("=== Model Directory Debug ===\n")
+        debug.append("Directory: ${modelsDir.absolutePath}\n")
+        debug.append("Exists: ${modelsDir.exists()}\n")
+        
+        if (modelsDir.exists()) {
+            val files = modelsDir.listFiles()
+            debug.append("File count: ${files?.size ?: 0}\n")
+            
+            files?.forEach { file ->
+                debug.append("File: ${file.name}\n")
+                debug.append("  Size: ${file.length()} bytes (${file.length() / 1024 / 1024} MB)\n")
+                debug.append("  Readable: ${file.canRead()}\n")
+                debug.append("  Is Task File: ${file.name.endsWith(ModelConfig.MODEL_FILE_EXTENSION)}\n")
+                
+                if (file.name.endsWith(ModelConfig.MODEL_FILE_EXTENSION)) {
+                    debug.append("  Valid: ${isValidModelFile(file)}\n")
+                }
+                debug.append("\n")
+            }
+        }
+        
+        debug.append("Current Model State: ${_modelState.value}\n")
+        debug.append("Download Status: isDownloading=${_downloadStatus.value.isDownloading}, progress=${_downloadStatus.value.progress}\n")
+        
+        // Check WorkManager status
+        try {
+            val workInfos = workManager.getWorkInfosForUniqueWork(MODEL_DOWNLOAD_WORK).get()
+            val activeWork = workInfos.filter { workInfo ->
+                workInfo.state == WorkInfo.State.RUNNING || workInfo.state == WorkInfo.State.ENQUEUED
+            }
+            debug.append("Active WorkManager jobs: ${activeWork.size}\n")
+            activeWork.forEach { workInfo ->
+                debug.append("  Job ${workInfo.id}: ${workInfo.state}\n")
+            }
+        } catch (e: Exception) {
+            debug.append("WorkManager query error: ${e.message}\n")
+        }
+        
+        debug.append("========================\n")
+        
+        val result = debug.toString()
+        Log.d(TAG, result)
+        return result
+    }
+    
+    fun refreshDownloadStatus() {
+        Log.d(TAG, "Refreshing download status...")
+        checkOngoingDownloads()
+        if (_modelState.value != ModelState.DOWNLOADING) {
+            checkModelStatus()
+        }
+    }
+    
+    companion object {
+        private const val TAG = "ModelManager"
+        private const val MODEL_DOWNLOAD_WORK = "model_download_work"
     }
 } 

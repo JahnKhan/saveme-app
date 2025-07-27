@@ -4,13 +4,14 @@ package com.app.saveme.data
 object ModelConfig {
     const val DEFAULT_MODEL_NAME = "gemma-3n-E2B-it-int4"
     //const val DEFAULT_MODEL_URL = "https://huggingface.co/google/gemma-3n-E2B-it-litert-preview/resolve/main/gemma-3n-E2B-it-int4.task"
-    const val DEFAULT_MODEL_URL ="https://gemma3n.s3.eu-central-1.amazonaws.com/gemma3n.task"
+   // const val DEFAULT_MODEL_URL ="https://gemma3n.s3.eu-central-1.amazonaws.com/gemma3n.task"
+    const val DEFAULT_MODEL_URL ="https://save-me.app/llm/gemma-3n-E2B-it-int4.task"
     // Configurable model URL - change this to use different models
     var CURRENT_MODEL_URL = DEFAULT_MODEL_URL
     var CURRENT_MODEL_NAME = DEFAULT_MODEL_NAME
     
-    const val MODEL_FILE_EXTENSION = ".task"
-    const val MODELS_DIR = "models"
+    const val MODEL_FILE_EXTENSION = ".task"// this is the extension the ModelManager is looking for
+    const val MODELS_DIR = "models" // this is the directory the ModelManager checks if there is a model
     
     // Import functionality
     var IMPORTED_MODEL_NAME: String? = null

@@ -26,6 +26,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -46,6 +50,9 @@ fun ModelDownloadScreen(
     onImportModel: (Uri, String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    // State to track if user is in import mode
+    var showImportMode by remember { mutableStateOf(false) }
+    
     // File picker launcher
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
@@ -56,6 +63,8 @@ fun ModelDownloadScreen(
                 ?: "imported_model.task"
             onImportModel(selectedUri, fileName)
         }
+        // If uri is null (user cancelled), reset to main options
+        showImportMode = false
     }
     
     Column(
@@ -102,37 +111,85 @@ fun ModelDownloadScreen(
                 
                 when (modelState) {
                     ModelState.NOT_DOWNLOADED -> {
-                        Column(
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Button(
-                                onClick = onStartDownload,
-                                modifier = Modifier.fillMaxWidth()
+                        if (showImportMode) {
+                            // Import mode - show instructions and file picker option
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
                             ) {
-                                Text("Download Model (~3GB)")
-                            }
-                            
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            Text(
-                                text = "OR",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            
-                            Spacer(modifier = Modifier.height(12.dp))
-                            
-                            OutlinedButton(
-                                onClick = { filePickerLauncher.launch("*/*") },
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Icon(
-                                    Icons.Rounded.Upload,
-                                    contentDescription = "Import Model",
-                                    modifier = Modifier.size(18.dp)
+                                Text(
+                                    text = "Import Model File",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    textAlign = TextAlign.Center
                                 )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text("Import Model File")
+                                
+                                Spacer(modifier = Modifier.height(16.dp))
+                                
+                                Text(
+                                    text = "Select a .task model file from your device storage. Make sure the file is a compatible LLM model.",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    textAlign = TextAlign.Center,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                
+                                Spacer(modifier = Modifier.height(24.dp))
+                                
+                                Button(
+                                    onClick = { filePickerLauncher.launch("*/*") },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Upload,
+                                        contentDescription = "Select File",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Select File from Device")
+                                }
+                                
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                OutlinedButton(
+                                    onClick = { showImportMode = false },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Cancel - Back to Download")
+                                }
+                            }
+                        } else {
+                            // Main options - download or import
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Button(
+                                    onClick = onStartDownload,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("Download Model (~3GB)")
+                                }
+                                
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                Text(
+                                    text = "OR",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                
+                                Spacer(modifier = Modifier.height(12.dp))
+                                
+                                OutlinedButton(
+                                    onClick = { showImportMode = true },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(
+                                        Icons.Rounded.Upload,
+                                        contentDescription = "Import Model",
+                                        modifier = Modifier.size(18.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Import Model File (.task)")
+                                }
                             }
                         }
                     }

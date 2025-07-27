@@ -15,7 +15,8 @@ The user journey is straightforward:
 4. A single button press captures an image, which then stays on the screen as a background.
 5. Immediately after the photo is taken, the app starts recording audio.
 6. When the user stops the recording (or after a time limit), the captured image and a hardcoded text prompt ("what is visible?") are sent to the local LLM for analysis.
-7. The model's response is then displayed to the user as a status message.
+7. The app transitions to a dedicated chat screen where the model's response is displayed along with the captured image.
+8. From the chat screen, users can start a new capture or cancel the current analysis.
 
 ---
 
@@ -28,7 +29,7 @@ The project is organized into several key packages located in `saveme/app/src/ma
 -   **`worker`**: Handles background tasks, specifically downloading the AI model without freezing the UI.
 -   **`audio`**: A dedicated class for handling audio recording.
 -   **`storage`**: A utility for saving files (images and audio) to the device.
--   **`ui`**: The entire user interface layer, including screens, components, and the ViewModel that drives them.
+-   **`ui`**: The entire user interface layer, including screens, components, themes, and the ViewModel that drives them.
 -   **`utils`**: Helper classes, such as for managing permissions.
 
 ---
@@ -65,20 +66,37 @@ The **`ModelManager.kt`** class is the centerpiece of the app's AI functionality
 
 ### 5. The User Interface (`ui` package)
 
-The UI is built entirely with Jetpack Compose and follows a reactive pattern.
+The UI is built entirely with Jetpack Compose and follows a reactive pattern with a two-screen navigation system.
 
--   **`CameraViewModel.kt`**: This is the central hub connecting the UI to the app's logic. It holds the UI state (`CameraUiState`) in a `StateFlow`, which the UI observes for changes. It owns the instance of `ModelManager` and exposes simple, high-level functions like `startModelDownload()` or `onPhotoCaptured()` that the UI can call without needing to know the implementation details.
+-   **`CameraViewModel.kt`**: This is the central hub connecting the UI to the app's logic. It holds the UI state (`CameraUiState`) in a `StateFlow`, which the UI observes for changes. It owns the instance of `ModelManager` and exposes simple, high-level functions like `startModelDownload()` or `onPhotoCaptured()` that the UI can call without needing to know the implementation details. It also manages navigation between the CAMERA and CHAT screens.
 
 -   **`CameraScreen.kt` (The Main Screen)**: This Composable function is the root of our UI.
     -   It observes the `CameraUiState` from the `CameraViewModel`.
     -   It contains the primary logical branching for the UI:
         1.  If permissions are not granted, it shows a simple message.
         2.  If a model is not ready (`modelState` is NOT_DOWNLOADED, DOWNLOADING, etc.), it displays the **`ModelDownloadScreen.kt`** component.
-        3.  Otherwise, it shows the main camera interface.
-    -   It overlays the **`AudioRecordingIndicator.kt`** and the capture button on top of the **`CameraPreview.kt`**.
+        3.  For the CAMERA screen, it shows the main camera interface with capture functionality.
+        4.  For the CHAT screen, it displays the **`ChatScreen.kt`** component with analysis results.
+    -   On the camera screen, it overlays the **`AudioRecordingIndicator.kt`** and the **`CaptureButton.kt`** on top of the **`CameraPreview.kt`**.
     -   When the user captures an image and audio recording starts, it cleverly displays the captured `Bitmap` as a full-screen background, fulfilling the requirement for the image to remain visible.
 
--   **`components/ModelDownloadScreen.kt`**: This is a self-contained UI for the model acquisition flow. It receives the current `modelState` and `downloadStatus` from the ViewModel and displays the appropriate UI: a download/import button, a progress bar while downloading/importing, or an error message. It uses an `ActivityResultLauncher` to launch the system's file picker for the import functionality. 
+#### **UI Components (`ui/components` subdirectory)**:
+
+-   **`ModelDownloadScreen.kt`**: This is a self-contained UI for the model acquisition flow. It receives the current `modelState` and `downloadStatus` from the ViewModel and displays the appropriate UI: a download/import button, a progress bar while downloading/importing, or an error message. It uses an `ActivityResultLauncher` to launch the system's file picker for the import functionality.
+
+-   **`ChatScreen.kt`**: A dedicated screen for displaying AI analysis results. It shows the captured image alongside the LLM response in a scrollable interface. Users can start a new capture or cancel the current analysis from this screen.
+
+-   **`CameraPreview.kt`**: Handles the camera preview functionality using CameraX, including image capture capabilities.
+
+-   **`CaptureButton.kt`**: A specialized floating action button that provides visual feedback for capture and recording states. It changes color and icon based on whether audio recording is active.
+
+-   **`AudioRecordingIndicator.kt`**: Displays recording status, duration, and audio amplitude visualization during audio capture.
+
+#### **Theme Structure (`ui/theme` subdirectory)**:
+
+-   **`Theme.kt`**: Defines the app's Material 3 theme configuration
+-   **`Color.kt`**: App color palette definitions  
+-   **`Type.kt`**: Typography system configuration
 
 ---
 
@@ -115,15 +133,33 @@ This package holds miscellaneous helper classes that can be used across the appl
 
 -   **`PermissionUtils.kt`**: A simple but important utility for handling Android's runtime permissions. It defines the list of permissions the app requires (`CAMERA` and `RECORD_AUDIO`) and provides a helper function, `hasAllPermissions()`, that the `CameraScreen` calls on startup to check if it's safe to proceed with using the camera and microphone. This centralizes permission logic, making it easy to manage.
 
-Of course. While a class diagram is good for showing the static structure of the app, a **Sequence Diagram** is much better suited to your request because it excels at visualizing how different objects and classes interact with each other over time. It clearly shows the flow of function calls and events, which is exactly what you want to see.
+---
+
+### 10. Navigation and User Flow
+
+The app uses a simple two-screen navigation system managed by the `AppScreen` enum:
+
+1. **CAMERA Screen**: The primary interface with camera preview, capture button, and audio recording functionality
+2. **CHAT Screen**: Displays analysis results with the captured image and LLM response
+
+The navigation flow is:
+- **App Launch** → **Model Check** → **Camera Screen** (if model ready) or **Model Download Screen**
+- **Image Capture** → **Audio Recording** → **AI Analysis** → **Chat Screen**
+- **Chat Screen** → **New Capture** (returns to Camera Screen) or **Cancel** (returns to Camera Screen)
+
+---
+
+### 11. Architecture Flow Diagrams
+
+While a class diagram is good for showing the static structure of the app, **Sequence Diagrams** excel at visualizing how different objects and classes interact with each other over time. They clearly show the flow of function calls and events throughout the application lifecycle.
 
 Below are two sequence diagrams that illustrate the architecture and the main operational flows of the application.
 
 ---
 
-### **Diagram 1: Main Application & Inference Flow**
+#### **Diagram 1: Main Application & Inference Flow**
 
-This diagram shows the sequence of events from the moment the user starts the app to when an AI analysis is performed on a captured image.
+This diagram shows the sequence of events from the moment the user starts the app to when an AI analysis is performed on a captured image and displayed in the chat screen.
 
 ```mermaid
 sequenceDiagram
@@ -182,7 +218,8 @@ sequenceDiagram
     LlmInference (MediaPipe)-->>ModelManager: Returns response string
     ModelManager-->>CameraViewModel: Inference result
     deactivate ModelManager
-    CameraViewModel-->>CameraScreen (UI): uiState (Show LLM Response)
+    CameraViewModel->>CameraViewModel: switchToChatScreen()
+    CameraViewModel-->>CameraScreen (UI): uiState (currentScreen = CHAT, Show ChatScreen)
     deactivate CameraViewModel
 
 ```
@@ -197,11 +234,11 @@ sequenceDiagram
 4.  **Recording**: The `CameraViewModel` receives the image, saves it, and immediately calls `startRecording()` on the `AudioRecorder` instance.
 5.  **Inference**: When the user presses the stop button, the `CameraViewModel` stops the audio recording and calls `processData()`. This function is the trigger for the AI analysis. It calls the `generateResponse()` method in the `ModelManager`, passing in the captured image and the hardcoded prompt.
 6.  **AI Analysis**: The `ModelManager` creates a new, temporary inference *session*, adds the image and text, and gets a response back from the MediaPipe engine.
-7.  **Display**: The response string is passed back to the `CameraViewModel`, which updates the UI state. The `CameraScreen` observes this final change and displays the result.
+7.  **Navigation to Chat**: The response string is passed back to the `CameraViewModel`, which calls `switchToChatScreen()` to update the navigation state. The `CameraScreen` observes this change and displays the `ChatScreen` with the analysis results.
 
 ---
 
-### **Diagram 2: Model Acquisition Flow (Download & Import)**
+#### **Diagram 2: Model Acquisition Flow (Download & Import)**
 
 This diagram details what happens when the user needs to get a model onto the device. This flow is managed by the `ModelDownloadScreen`.
 
@@ -263,7 +300,7 @@ sequenceDiagram
 
 ---
 
-### 10. Key Technical Decisions
+### 12. Key Technical Decisions
 
 Several important architectural decisions were made to ensure the app works reliably:
 
@@ -277,12 +314,15 @@ Several important architectural decisions were made to ensure the app works reli
 
 -   **Reactive UI**: The entire UI is built with Jetpack Compose and follows a reactive pattern where the UI automatically updates when the underlying state changes, eliminating the need for manual UI updates.
 
+-   **Two-Screen Navigation**: The app uses a dedicated chat screen to display results rather than overlaying them on the camera screen, providing a cleaner user experience and better content organization.
+
 ---
 
-### 11. Dependencies and Requirements
+### 12. Dependencies and Requirements
 
 The app requires:
 -   **Android API Level 31+** (Android 12+)
+-   **Target SDK 36** (Android 14+)
 -   **Camera and Microphone permissions**
 -   **Internet permission** (for model downloads only)
 -   **At least 4GB of available storage** (for the AI model)
@@ -292,4 +332,6 @@ Key dependencies:
 -   **CameraX** for camera functionality
 -   **MediaPipe LLM Inference API** for on-device AI
 -   **WorkManager** for background tasks
+-   **Material 3** for UI components
+-   **Material Icons Extended** for additional icons
 -   **Gson** for JSON parsing
