@@ -7,6 +7,10 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PhotoCamera
+import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.VolumeUp
+import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.Psychology
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -18,6 +22,7 @@ import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.app.saveme.ui.components.CaptureButton
+import com.app.saveme.ui.ProcessingPhase
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -26,8 +31,14 @@ fun ChatScreen(
     llmResponse: String,
     userPrompt: String,
     isProcessing: Boolean,
+    transcriptionStatus: String = "",
+    isSpeaking: Boolean = false,
+    isTranscribing: Boolean = false,
+    isGeneratingResponse: Boolean = false,
+    processingPhase: ProcessingPhase = ProcessingPhase.IDLE,
     onNewCaptureClicked: () -> Unit,
     onCancelClicked: () -> Unit,
+    onStopSpeaking: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val scrollState = rememberScrollState()
@@ -38,22 +49,62 @@ fun ChatScreen(
         }
     }
     
+    // Debug logging for streaming
+    LaunchedEffect(llmResponse) {
+        println("ChatScreen: llmResponse changed to length: ${llmResponse.length}")
+    }
+    
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("AI Analysis") },
                 actions = {
-                    if (isProcessing) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            modifier = Modifier.padding(end = 8.dp)
-                        ) {
-                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                            Text("Generating...", style = MaterialTheme.typography.bodySmall)
-                            Spacer(modifier = Modifier.weight(1f))
-                            TextButton(onClick = onCancelClicked) {
-                                Text("Cancel")
+                    when {
+                        isTranscribing -> {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                Text("Transcribing...", style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        isGeneratingResponse -> {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                                Text("Generating...", style = MaterialTheme.typography.bodySmall)
+                                Spacer(modifier = Modifier.weight(1f))
+                                TextButton(onClick = onCancelClicked) {
+                                    Text("Cancel")
+                                }
+                            }
+                        }
+                        isSpeaking -> {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(end = 8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.VolumeUp,
+                                    contentDescription = "Speaking",
+                                    modifier = Modifier.size(20.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Text("Speaking...", style = MaterialTheme.typography.bodySmall)
+                                Spacer(modifier = Modifier.weight(1f))
+                                IconButton(onClick = onStopSpeaking) {
+                                    Icon(
+                                        Icons.Rounded.Stop,
+                                        contentDescription = "Stop Speaking",
+                                        tint = MaterialTheme.colorScheme.error
+                                    )
+                                }
                             }
                         }
                     }
@@ -71,7 +122,7 @@ fun ChatScreen(
                     onClick = onNewCaptureClicked,
                     icon = Icons.Rounded.PhotoCamera,
                     contentDescription = "New Capture",
-                    enabled = !isProcessing
+                    enabled = !isProcessing && !isSpeaking && !isTranscribing && !isGeneratingResponse
                 )
             }
         }
@@ -95,34 +146,117 @@ fun ChatScreen(
                 }
             }
             
-            // User Prompt
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
-            ) {
-                Column(modifier = Modifier.padding(12.dp)) {
-                    Text("You", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                    Text(
-                        text = userPrompt.ifEmpty { "What do you see?" }, 
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+            // Transcription Status - only show when we have transcription
+            if (transcriptionStatus.isNotEmpty()) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(
+                            Icons.Rounded.Mic,
+                            contentDescription = "Transcription",
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Column {
+                            Text(
+                                "Speech Recognition", 
+                                style = MaterialTheme.typography.labelSmall, 
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = transcriptionStatus, 
+                                style = MaterialTheme.typography.bodyMedium
+                            )
+                        }
+                    }
                 }
             }
             
-            // AI Response
-            if (isProcessing || llmResponse.isNotEmpty()) {
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
-                ) {
-                    Column(modifier = Modifier.padding(12.dp)) {
-                        Text("AI Assistant", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
-                        if (isProcessing && llmResponse.isEmpty()) {
-                             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                                Text("Thinking...", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic)
+            // AI Response - show processing state or actual response
+            when {
+                isTranscribing -> {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Mic,
+                                    contentDescription = "Transcribing",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Text("AI Assistant", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
                             }
-                        } else {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Text("Transcribing your speech...", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic)
+                            }
+                        }
+                    }
+                }
+                isGeneratingResponse && llmResponse.isEmpty() -> {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    Icons.Rounded.Psychology,
+                                    contentDescription = "Thinking",
+                                    modifier = Modifier.size(16.dp),
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                                Text("AI Assistant", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                            }
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                                Text("Analyzing image and generating response...", style = MaterialTheme.typography.bodyMedium, fontStyle = FontStyle.Italic)
+                            }
+                        }
+                    }
+                }
+                llmResponse.isNotEmpty() -> {
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondaryContainer)
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text("AI Assistant", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                                if (isSpeaking) {
+                                    Icon(
+                                        Icons.Rounded.VolumeUp,
+                                        contentDescription = "Speaking",
+                                        modifier = Modifier.size(16.dp),
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                // Add streaming indicator
+                                if (llmResponse.isNotEmpty()) {
+                                    Text(
+                                        "(${llmResponse.length} chars)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
                             Text(llmResponse, style = MaterialTheme.typography.bodyMedium)
                         }
                     }

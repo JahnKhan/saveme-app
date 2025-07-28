@@ -17,8 +17,8 @@ const val IMAGE_FILE_PREFIX = "saveme_image_"
 const val AUDIO_FILE_PREFIX = "saveme_audio_"
 const val FILE_DATE_FORMAT = "yyyyMMdd_HHmmss"
 
-// Dummy transcription text
-const val DUMMY_TRANSCRIPTION = "you are an emergency AI assistant, based on the context provided to you, you answer questions of the user, you incorporate the image aswell: query: help me i dont know how to shutdown the system here !"
+// Transcription constants
+const val TRANSCRIPTION_PROMPT_PREFIX = ""
 
-// Dummy AI response for testing
+// Dummy AI response for testing (fallback)
 const val DUMMY_AI_RESPONSE = "I can see a camera view with various objects in the scene. This is a test response from the AI model to demonstrate that the image analysis is working properly." 

@@ -240,8 +240,14 @@ fun CameraScreen(
                             llmResponse = uiState.llmResponse,
                             userPrompt = uiState.userPrompt,
                             isProcessing = uiState.isProcessingImage,
+                            transcriptionStatus = uiState.transcriptionStatus,
+                            isSpeaking = uiState.isSpeaking,
+                            isTranscribing = uiState.isTranscribing,
+                            isGeneratingResponse = uiState.isGeneratingResponse,
+                            processingPhase = uiState.processingPhase,
                             onNewCaptureClicked = { viewModel.switchToCameraScreen() },
-                            onCancelClicked = { viewModel.cancelInference() }
+                            onCancelClicked = { viewModel.cancelInference() },
+                            onStopSpeaking = { viewModel.stopSpeaking() }
                         )
                     }
                 }
