@@ -23,6 +23,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.app.saveme.ui.components.CaptureButton
 import com.app.saveme.ui.ProcessingPhase
+import com.app.saveme.ui.components.MarkdownText
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -257,7 +258,9 @@ fun ChatScreen(
                                     )
                                 }
                             }
-                            Text(llmResponse, style = MaterialTheme.typography.bodyMedium)
+                            MarkdownText(
+                                text = llmResponse
+                            )
                         }
                     }
                 }

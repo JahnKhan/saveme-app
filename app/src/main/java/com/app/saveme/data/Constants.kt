@@ -20,5 +20,8 @@ const val FILE_DATE_FORMAT = "yyyyMMdd_HHmmss"
 // Transcription constants
 const val TRANSCRIPTION_PROMPT_PREFIX = ""
 
+// Unified system prompt for all scenarios
+const val SYSTEM_PROMPT = "You are an AI assistant with access to context and an image. When the user asks a question, answer them directly and provide helpful guidance based on the context, image, and their question. When no question is provided, analyze the image and tell the user what you see and how it might be relevant to their situation. Always speak directly to the user in a friendly, helpful manner. Provide clear insights and practical advice based on what you observe in the image and the available context."
+
 // Dummy AI response for testing (fallback)
 const val DUMMY_AI_RESPONSE = "I can see a camera view with various objects in the scene. This is a test response from the AI model to demonstrate that the image analysis is working properly." 

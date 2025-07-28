@@ -8,6 +8,7 @@ import androidx.lifecycle.viewModelScope
 import com.app.saveme.audio.AudioRecorder
 import com.app.saveme.data.TRANSCRIPTION_PROMPT_PREFIX
 import com.app.saveme.data.DUMMY_AI_RESPONSE
+import com.app.saveme.data.SYSTEM_PROMPT
 import com.app.saveme.data.ModelDownloadStatus
 import com.app.saveme.data.ModelImportStatus
 import com.app.saveme.data.ModelState
@@ -423,14 +424,23 @@ class CameraViewModel : ViewModel() {
             // Transcribe audio
             val transcription = transcriptionService?.transcribeAudioFile(wavFile.absolutePath) ?: "Error: Transcription service not available"
             
+            // Clean up the transcription result
+            val cleanedTranscription = when {
+                transcription.startsWith("Error:") -> transcription
+                transcription.trim().isEmpty() -> "NOT SPEECH RECOGNIZED"
+                // Check if the transcription looks like a default/fallback response
+                isLikelyDefaultResponse(transcription.trim()) -> "NOT SPEECH RECOGNIZED"
+                else -> transcription.trim()
+            }
+            
             withContext(Dispatchers.Main) {
                 _uiState.value = _uiState.value.copy(
                     isTranscribing = false,
-                    transcriptionStatus = transcription
+                    transcriptionStatus = cleanedTranscription
                 )
             }
             
-            Log.d(TAG, "Transcription result: $transcription")
+            Log.d(TAG, "Transcription result: $cleanedTranscription")
             
             // Clean up temporary WAV file
             wavFile.delete()
@@ -460,20 +470,17 @@ class CameraViewModel : ViewModel() {
             }
             
             // Create prompt with transcription
-            val prompt = if (transcription.startsWith("Error:")) {
-                // Fallback to dummy prompt if transcription failed
-                "help me i dont know how to shutdown the system here !"
+            val prompt = if (cleanedTranscription.startsWith("Error:") || cleanedTranscription == "NOT SPEECH RECOGNIZED") {
+                // Use system prompt when no speech is recognized
+                SYSTEM_PROMPT
             } else {
-                if (TRANSCRIPTION_PROMPT_PREFIX.isNotEmpty()) {
-                    "$TRANSCRIPTION_PROMPT_PREFIX $transcription"
-                } else {
-                    transcription
-                }
+                // Always include system prompt, then add transcription
+                "$SYSTEM_PROMPT\n\nUser: $cleanedTranscription"
             }
             
             withContext(Dispatchers.Main) {
                 _uiState.value = _uiState.value.copy(
-                    userPrompt = transcription, // Only show the transcription, not the full prompt
+                    userPrompt = cleanedTranscription, // Only show the transcription, not the full prompt
                     isGeneratingResponse = true,
                     processingPhase = ProcessingPhase.GENERATING,
                     statusMessage = "Generating response...",
@@ -635,5 +642,114 @@ class CameraViewModel : ViewModel() {
         
         // Clean up TTS
         ttsManager?.cleanup()
+    }
+    
+    /**
+     * Detects if the transcription is likely a default/fallback response from the Whisper model
+     * when it can't properly transcribe the audio.
+     */
+    private fun isLikelyDefaultResponse(transcription: String): Boolean {
+        if (transcription.isEmpty()) return false
+        
+        val lowerTranscription = transcription.lowercase()
+        
+        // Common default responses from Whisper when it can't transcribe properly
+        val defaultResponses = setOf(
+            "thank you for watching",
+            "thank you",
+            "you",
+            "watching",
+            "the",
+            "and",
+            "or",
+            "but",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "of",
+            "with",
+            "by",
+            "from",
+            "up",
+            "down",
+            "out",
+            "off",
+            "over",
+            "under",
+            "through",
+            "between",
+            "among",
+            "during",
+            "before",
+            "after",
+            "since",
+            "until",
+            "while",
+            "because",
+            "although",
+            "unless",
+            "if",
+            "then",
+            "else",
+            "when",
+            "where",
+            "why",
+            "how",
+            "what",
+            "who",
+            "which",
+            "that",
+            "this",
+            "these",
+            "those",
+            "a",
+            "an",
+            "the",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "can",
+            "must",
+            "shall"
+        )
+        
+        // Check if the transcription is just a single common word
+        if (lowerTranscription in defaultResponses) return true
+        
+        // Check if it's a very short phrase that looks like a default response
+        val words = lowerTranscription.split("\\s+".toRegex())
+        if (words.size <= 3 && words.all { it in defaultResponses }) return true
+        
+        // Check for common patterns that indicate default responses
+        val defaultPatterns = listOf(
+            "thank you for",
+            "thanks for",
+            "thank you",
+            "thanks",
+            "you for",
+            "for watching",
+            "for listening",
+            "for viewing"
+        )
+        
+        return defaultPatterns.any { pattern -> lowerTranscription.contains(pattern) }
     }
 } 
