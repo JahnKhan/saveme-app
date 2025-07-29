@@ -93,4 +93,9 @@ dependencies {
     // Rich text for markdown support
     implementation("com.halilibo.compose-richtext:richtext-ui-material3:1.0.0-alpha02")
     implementation("com.halilibo.compose-richtext:richtext-commonmark:1.0.0-alpha02")
+    
+    // Media3 for video playback
+    implementation("androidx.media3:media3-exoplayer:1.3.1")
+    implementation("androidx.media3:media3-ui:1.3.1")
+    implementation("androidx.media3:media3-common:1.3.1")
 }
