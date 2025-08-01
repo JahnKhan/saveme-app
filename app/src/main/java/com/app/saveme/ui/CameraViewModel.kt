@@ -164,19 +164,14 @@ class CameraViewModel : ViewModel() {
     
     fun loadDigitalTwin(token: String, context: Context) {
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(isLoadingDigitalTwin = true, statusMessage = "Loading Digital Twin...")
+            _uiState.value = _uiState.value.copy(isLoadingDigitalTwin = true, statusMessage = "")
             try {
                 val response = digitalTwinApiService.getDigitalTwin(token)
                 fileManager.saveContext(context, response.text)
                 _uiState.value = _uiState.value.copy(
                     isLoadingDigitalTwin = false,
-                    statusMessage = "Digital Twin loaded successfully!"
+                    statusMessage = "" // Don't show any success message
                 )
-                // Clear message after delay
-                kotlinx.coroutines.delay(3000)
-                if (_uiState.value.statusMessage.contains("Digital Twin loaded successfully")) {
-                    _uiState.value = _uiState.value.copy(statusMessage = "")
-                }
             } catch (e: Exception) {
                 _uiState.value = _uiState.value.copy(
                     isLoadingDigitalTwin = false,
@@ -306,7 +301,7 @@ class CameraViewModel : ViewModel() {
     private suspend fun startAudioRecording(context: Context) {
         _uiState.value = _uiState.value.copy(
             isRecordingAudio = true,
-            statusMessage = "Recording audio...",
+            statusMessage = "", // Clear any existing status message
             recordingDuration = 0f,
             audioAmplitude = 0
         )
