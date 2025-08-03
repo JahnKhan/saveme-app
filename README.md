@@ -1,29 +1,8 @@
 # Project Documentation: Cursor Agent Android App
 
 ---
-<!-- put this in your README.md (wherever HTML is allowed) -->
-<div
-  style="
-    /* size of the whole "frame" */
-    width: 800px;
-    height: 450px;
-
-    /* background image + sizing */
-    background: url('./docs/backround.png') no-repeat center/cover;
-
-    /* flexbox centering + equal spacing */
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-
-    /* optional padding so your first/last images aren't flush to the edge */
-    padding: 0 20px;
-  "
->
-  <img src="./docs/1.png" alt="First" style="max-height: 80%;"/>
-  <img src="./docs/2.png" alt="Second" style="max-height: 80%;"/>
-  <img src="./docs/3.png" alt="Third" style="max-height: 80%;"/>
-</div>
+![Composite Image 1](./docs/composite_75.png)
+![Composite Image 2](./docs/composite_new.png)
 
 ---
 
