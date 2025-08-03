@@ -1,6 +1,31 @@
 # Project Documentation: Cursor Agent Android App
 
 ---
+<?xml version="1.0" encoding="UTF-8"?>
+<svg
+   xmlns="http://www.w3.org/2000/svg"
+   width="800" height="450"
+   viewBox="0 0 800 450"
+>
+  <!-- background -->
+  <image href="background.png" width="800" height="450"/>
+
+  <!-- top‐left -->
+  <image href="image1.png" x="20" y="20" width="150"/>
+
+  <!-- centered -->
+  <image href="image2.png"
+         x="50%" y="50%"
+         width="200" height="auto"
+         transform="translate(-100,-100)"/>
+
+  <!-- bottom‐right -->
+  <image href="image3.png"
+         x="630" y="430" width="150"/>
+</svg>
+
+
+
 
 ### 1. High-Level Overview
 
