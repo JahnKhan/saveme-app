@@ -8,20 +8,20 @@
    viewBox="0 0 800 450"
 >
   <!-- background -->
-  <image href="background.png" width="800" height="450"/>
+  <image href="docs/backround.png" width="800" height="450"/>
 
   <!-- top‐left -->
-  <image href="image1.png" x="20" y="20" width="150"/>
+  <image href="docs/1.png" x="20" y="20" width="200"/>
 
   <!-- centered -->
-  <image href="image2.png"
+  <image href="docs/2.png"
          x="50%" y="50%"
          width="200" height="auto"
          transform="translate(-100,-100)"/>
 
   <!-- bottom‐right -->
-  <image href="image3.png"
-         x="630" y="430" width="150"/>
+  <image href="docs/3.png"
+         x="630" y="430" width="200"/>
 </svg>
 
 
