@@ -2,8 +2,8 @@
 
 ---
 <div style="text-align: center;">
-  <img src="./docs/composite_75.png" alt="Composite Image 1" style="max-width: 100%; height: auto; transform: scale(1.2); object-fit: cover;"/>
-  <img src="./docs/composite_new.png" alt="Composite Image 2" style="max-width: 100%; height: auto; transform: scale(1.2); object-fit: cover;"/>
+  <img src="./docs/composite_75.png" alt="Composite Image 1" style="max-width: 100%; height: auto; transform: scale(1.4); object-fit: cover;"/>
+  <img src="./docs/composite_new.png" alt="Composite Image 2" style="max-width: 100%; height: auto; transform: scale(1.4); object-fit: cover;"/>
 </div>
 
 ---
