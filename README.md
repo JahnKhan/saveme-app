@@ -4,23 +4,24 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg
    xmlns="http://www.w3.org/2000/svg"
+   xmlns:xlink="http://www.w3.org/1999/xlink"
    width="800" height="450"
    viewBox="0 0 800 450"
 >
   <!-- background -->
-  <image href="docs/backround.png" width="800" height="450"/>
+  <image xlink:href="docs/backround.png" width="800" height="450"/>
 
   <!-- top‐left -->
-  <image href="docs/1.png" x="20" y="20" width="200"/>
+  <image xlink:href="docs/1.png" x="20" y="20" width="200"/>
 
   <!-- centered -->
-  <image href="docs/2.png"
+  <image xlink:href="docs/2.png"
          x="50%" y="50%"
          width="200" height="auto"
          transform="translate(-100,-100)"/>
 
   <!-- bottom‐right -->
-  <image href="docs/3.png"
+  <image xlink:href="docs/3.png"
          x="630" y="430" width="200"/>
 </svg>
 
