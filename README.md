@@ -1,29 +1,31 @@
 # Project Documentation: Cursor Agent Android App
 
 ---
-<?xml version="1.0" encoding="UTF-8"?>
-<svg
-   xmlns="http://www.w3.org/2000/svg"
-   xmlns:xlink="http://www.w3.org/1999/xlink"
-   width="800" height="450"
-   viewBox="0 0 800 450"
+<!-- put this in your README.md (wherever HTML is allowed) -->
+<div
+  style="
+    /* size of the whole "frame" */
+    width: 800px;
+    height: 450px;
+
+    /* background image + sizing */
+    background: url('./docs/backround.png') no-repeat center/cover;
+
+    /* flexbox centering + equal spacing */
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+
+    /* optional padding so your first/last images aren't flush to the edge */
+    padding: 0 20px;
+  "
 >
-  <!-- background -->
-  <image xlink:href="docs/backround.png" width="800" height="450"/>
+  <img src="./docs/1.png" alt="First" style="max-height: 80%;"/>
+  <img src="./docs/2.png" alt="Second" style="max-height: 80%;"/>
+  <img src="./docs/3.png" alt="Third" style="max-height: 80%;"/>
+</div>
 
-  <!-- top‐left -->
-  <image xlink:href="docs/1.png" x="20" y="20" width="200"/>
-
-  <!-- centered -->
-  <image xlink:href="docs/2.png"
-         x="50%" y="50%"
-         width="200" height="auto"
-         transform="translate(-100,-100)"/>
-
-  <!-- bottom‐right -->
-  <image xlink:href="docs/3.png"
-         x="630" y="430" width="200"/>
-</svg>
+---
 
 
 
