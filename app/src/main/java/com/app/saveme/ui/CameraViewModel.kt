@@ -6,13 +6,17 @@ import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.app.saveme.audio.AudioRecorder
-import com.app.saveme.data.DUMMY_TRANSCRIPTION
+import com.app.saveme.data.TRANSCRIPTION_PROMPT_PREFIX
 import com.app.saveme.data.DUMMY_AI_RESPONSE
+import com.app.saveme.data.SYSTEM_PROMPT
 import com.app.saveme.data.ModelDownloadStatus
 import com.app.saveme.data.ModelImportStatus
 import com.app.saveme.data.ModelState
 import com.app.saveme.model.ModelManager
 import com.app.saveme.storage.FileManager
+import com.app.saveme.whisper.TranscriptionService
+import com.app.saveme.whisper.AudioConverter
+import com.app.saveme.tts.TTSManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -20,6 +24,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 private const val TAG = "CameraViewModel"
 
@@ -42,8 +47,23 @@ data class CameraUiState(
     val importStatus: ModelImportStatus = ModelImportStatus(),
     val llmResponse: String = "",
     val isStreamingResponse: Boolean = false,
-    val isProcessingImage: Boolean = false // Add this to prevent rapid captures
+    val isProcessingImage: Boolean = false, // Add this to prevent rapid captures
+    val isLoadingDigitalTwin: Boolean = false,
+    val userPrompt: String = "",
+    val transcriptionStatus: String = "",
+    val isSpeaking: Boolean = false,
+    // New processing states
+    val isTranscribing: Boolean = false,
+    val isGeneratingResponse: Boolean = false,
+    val processingPhase: ProcessingPhase = ProcessingPhase.IDLE
 )
+
+enum class ProcessingPhase {
+    IDLE,
+    TRANSCRIBING,
+    GENERATING,
+    SPEAKING
+}
 
 class CameraViewModel : ViewModel() {
 
@@ -53,6 +73,17 @@ class CameraViewModel : ViewModel() {
     private val audioRecorder = AudioRecorder()
     private val fileManager = FileManager()
     private var modelManager: ModelManager? = null
+    private var transcriptionService: TranscriptionService? = null
+    private var ttsManager: TTSManager? = null
+    private val audioConverter = AudioConverter()
+    
+    private val digitalTwinApiService by lazy {
+        val retrofit = retrofit2.Retrofit.Builder()
+            .baseUrl("https://save-me.app/")
+            .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
+            .build()
+        retrofit.create(com.app.saveme.data.DigitalTwinApiService::class.java)
+    }
     
     // Track ongoing inference job to properly cancel it
     private var inferenceJob: Job? = null
@@ -63,6 +94,46 @@ class CameraViewModel : ViewModel() {
             modelManager = ModelManager(context)
             observeModelState()
             Log.d(TAG, "ModelManager initialized")
+        }
+        
+        // Initialize transcription service
+        if (transcriptionService == null) {
+            Log.d(TAG, "Initializing TranscriptionService...")
+            transcriptionService = TranscriptionService(context)
+            initializeTranscriptionService()
+        }
+        
+        // Initialize TTS manager
+        if (ttsManager == null) {
+            Log.d(TAG, "Initializing TTSManager...")
+            ttsManager = TTSManager(context)
+            initializeTTSManager()
+        }
+    }
+    
+    private fun initializeTranscriptionService() {
+        viewModelScope.launch(Dispatchers.Default) {
+            val success = transcriptionService?.initialize() ?: false
+            withContext(Dispatchers.Main) {
+                if (success) {
+                    Log.d(TAG, "TranscriptionService initialized successfully")
+                } else {
+                    Log.e(TAG, "Failed to initialize TranscriptionService")
+                    _uiState.value = _uiState.value.copy(
+                        statusMessage = "Failed to initialize speech-to-text service"
+                    )
+                }
+            }
+        }
+    }
+    
+    private fun initializeTTSManager() {
+        ttsManager?.initialize { success ->
+            if (success) {
+                Log.d(TAG, "TTSManager initialized successfully")
+            } else {
+                Log.e(TAG, "Failed to initialize TTSManager")
+            }
         }
     }
     
@@ -91,6 +162,25 @@ class CameraViewModel : ViewModel() {
         }
     }
     
+    fun loadDigitalTwin(token: String, context: Context) {
+        viewModelScope.launch {
+            _uiState.value = _uiState.value.copy(isLoadingDigitalTwin = true, statusMessage = "")
+            try {
+                val response = digitalTwinApiService.getDigitalTwin(token)
+                fileManager.saveContext(context, response.text)
+                _uiState.value = _uiState.value.copy(
+                    isLoadingDigitalTwin = false,
+                    statusMessage = "" // Don't show any success message
+                )
+            } catch (e: Exception) {
+                _uiState.value = _uiState.value.copy(
+                    isLoadingDigitalTwin = false,
+                    statusMessage = "Failed to load Digital Twin: ${e.message}"
+                )
+            }
+        }
+    }
+
     fun startModelDownload() {
         viewModelScope.launch {
             try {
@@ -211,7 +301,7 @@ class CameraViewModel : ViewModel() {
     private suspend fun startAudioRecording(context: Context) {
         _uiState.value = _uiState.value.copy(
             isRecordingAudio = true,
-            statusMessage = "Recording audio...",
+            statusMessage = "", // Clear any existing status message
             recordingDuration = 0f,
             audioAmplitude = 0
         )
@@ -259,8 +349,8 @@ class CameraViewModel : ViewModel() {
                 if (audioFile != null) {
                     Log.d(TAG, "Audio saved successfully")
                     
-                    // Process data with AI model or dummy transcription
-                    processData(context)
+                    // Process data with AI model and real transcription
+                    processDataWithTranscription(context, audioData)
                     
                     // Cleanup old files
                     fileManager.cleanupOldFiles(context)
@@ -282,24 +372,82 @@ class CameraViewModel : ViewModel() {
         }
     }
     
-    private fun processData(context: Context) {
+    private fun processDataWithTranscription(context: Context, audioData: ByteArray) {
         if (_uiState.value.isProcessingImage) return
 
-        _uiState.value = _uiState.value.copy(isProcessingImage = true)
+        _uiState.value = _uiState.value.copy(
+            isProcessingImage = true,
+            processingPhase = ProcessingPhase.TRANSCRIBING,
+            statusMessage = "Converting audio format..."
+        )
         switchToChatScreen()
 
         inferenceJob = viewModelScope.launch(Dispatchers.Default) {
             val capturedImage = _uiState.value.lastCapturedImage
             if (capturedImage == null) {
-                Log.e(TAG, "processData failed: image is null")
-                _uiState.value = _uiState.value.copy(isProcessingImage = false)
+                Log.e(TAG, "processDataWithTranscription failed: image is null")
+                _uiState.value = _uiState.value.copy(
+                    isProcessingImage = false,
+                    processingPhase = ProcessingPhase.IDLE
+                )
                 return@launch
             }
+
+            // Convert PCM to WAV for transcription
+            val wavFile = File(context.getExternalFilesDir(null), "temp_audio_${System.currentTimeMillis()}.wav")
+            val conversionSuccess = audioConverter.pcmToWav(audioData, wavFile)
+            
+            if (!conversionSuccess) {
+                Log.e(TAG, "Failed to convert PCM to WAV")
+                _uiState.value = _uiState.value.copy(
+                    isProcessingImage = false,
+                    processingPhase = ProcessingPhase.IDLE,
+                    statusMessage = "Failed to convert audio format"
+                )
+                return@launch
+            }
+
+            // Start transcription phase
+            withContext(Dispatchers.Main) {
+                _uiState.value = _uiState.value.copy(
+                    isTranscribing = true,
+                    processingPhase = ProcessingPhase.TRANSCRIBING,
+                    statusMessage = "Transcribing audio..."
+                )
+            }
+
+            // Transcribe audio
+            val transcription = transcriptionService?.transcribeAudioFile(wavFile.absolutePath) ?: "Error: Transcription service not available"
+            
+            // Clean up the transcription result
+            val cleanedTranscription = when {
+                transcription.startsWith("Error:") -> transcription
+                transcription.trim().isEmpty() -> "NOT SPEECH RECOGNIZED"
+                // Check if the transcription looks like a default/fallback response
+                isLikelyDefaultResponse(transcription.trim()) -> "NOT SPEECH RECOGNIZED"
+                else -> transcription.trim()
+            }
+            
+            withContext(Dispatchers.Main) {
+                _uiState.value = _uiState.value.copy(
+                    isTranscribing = false,
+                    transcriptionStatus = cleanedTranscription
+                )
+            }
+            
+            Log.d(TAG, "Transcription result: $cleanedTranscription")
+            
+            // Clean up temporary WAV file
+            wavFile.delete()
 
             val manager = modelManager
             if (manager == null) {
                 Log.e(TAG, "ModelManager is not initialized, aborting.")
-                _uiState.value = _uiState.value.copy(isProcessingImage = false, llmResponse = "Error: Model not initialized.")
+                _uiState.value = _uiState.value.copy(
+                    isProcessingImage = false,
+                    processingPhase = ProcessingPhase.IDLE,
+                    llmResponse = "Error: Model not initialized."
+                )
                 return@launch
             }
 
@@ -307,32 +455,97 @@ class CameraViewModel : ViewModel() {
                 val modelReady = manager.waitForModelReady()
                 if (!modelReady) {
                     Log.e(TAG, "Model not ready, aborting.")
-                    _uiState.value = _uiState.value.copy(isProcessingImage = false, llmResponse = "Error: Model not ready.")
+                    _uiState.value = _uiState.value.copy(
+                        isProcessingImage = false,
+                        processingPhase = ProcessingPhase.IDLE,
+                        llmResponse = "Error: Model not ready."
+                    )
                     return@launch
                 }
             }
             
+            // Create prompt with transcription
+            val prompt = if (cleanedTranscription.startsWith("Error:") || cleanedTranscription == "NOT SPEECH RECOGNIZED") {
+                // Use system prompt when no speech is recognized
+                SYSTEM_PROMPT
+            } else {
+                // Always include system prompt, then add transcription
+                "$SYSTEM_PROMPT\n\nUser: $cleanedTranscription"
+            }
+            
+            withContext(Dispatchers.Main) {
+                _uiState.value = _uiState.value.copy(
+                    userPrompt = cleanedTranscription, // Only show the transcription, not the full prompt
+                    isGeneratingResponse = true,
+                    processingPhase = ProcessingPhase.GENERATING,
+                    statusMessage = "Generating response...",
+                    llmResponse = "" // Clear previous response for streaming
+                )
+            }
+            
+            // Start streaming TTS
+            withContext(Dispatchers.Main) {
+                _uiState.value = _uiState.value.copy(
+                    isSpeaking = true,
+                    processingPhase = ProcessingPhase.SPEAKING
+                )
+                ttsManager?.startStreaming()
+            }
+            
             manager.generateResponseStreaming(
-                prompt = DUMMY_TRANSCRIPTION,
+                prompt = prompt,
                 imageBitmap = capturedImage
             ) { token, isComplete ->
                 viewModelScope.launch(Dispatchers.Main) {
-                    if (inferenceJob?.isActive == true) {
+                    // Remove the inferenceJob check that was blocking updates
+                    val currentResponse = _uiState.value.llmResponse
+                    val newResponse = currentResponse + token
+                    
+                    Log.d(TAG, "Streaming token: '$token', current length: ${currentResponse.length}, new length: ${newResponse.length}")
+                    
+                    _uiState.value = _uiState.value.copy(
+                        llmResponse = newResponse,
+                        isStreamingResponse = true
+                    )
+                    
+                    Log.d(TAG, "Updated UI state with new response, length: ${_uiState.value.llmResponse.length}")
+                    
+                    // Stream token to TTS
+                    ttsManager?.streamToken(token)
+                    
+                    if (isComplete) {
+                        Log.d(TAG, "Streaming complete, final response length: ${newResponse.length}")
                         _uiState.value = _uiState.value.copy(
-                            llmResponse = _uiState.value.llmResponse + token
+                            isProcessingImage = false,
+                            isGeneratingResponse = false,
+                            isStreamingResponse = false,
+                            processingPhase = ProcessingPhase.SPEAKING
                         )
-                        if (isComplete) {
-                            _uiState.value = _uiState.value.copy(isProcessingImage = false)
-                        }
+                        // Flush any remaining text in the TTS buffer
+                        ttsManager?.flushStreamingBuffer()
                     }
                 }
             }
         }
     }
     
+    private fun speakResponse(response: String) {
+        if (response.isNotEmpty() && !response.startsWith("Error:")) {
+            _uiState.value = _uiState.value.copy(isSpeaking = true)
+            ttsManager?.speak(response) {
+                _uiState.value = _uiState.value.copy(isSpeaking = false)
+            }
+        }
+    }
+    
+    fun stopSpeaking() {
+        ttsManager?.stop()
+        ttsManager?.flushStreamingBuffer()
+        _uiState.value = _uiState.value.copy(isSpeaking = false)
+    }
+    
     private fun processDummyData() {
         Log.d(TAG, "Processing captured data with dummy transcription...")
-        Log.d(TAG, "Dummy transcription: $DUMMY_TRANSCRIPTION")
         
         _uiState.value = _uiState.value.copy(
             isCapturing = false,
@@ -375,13 +588,23 @@ class CameraViewModel : ViewModel() {
         _uiState.value = _uiState.value.copy(
             currentScreen = AppScreen.CAMERA,
             llmResponse = "",
-            isStreamingResponse = false
+            isStreamingResponse = false,
+            userPrompt = "",
+            transcriptionStatus = "",
+            isSpeaking = false,
+            isTranscribing = false,
+            isGeneratingResponse = false,
+            processingPhase = ProcessingPhase.IDLE
         )
+        
+        // Stop any ongoing speech
+        stopSpeaking()
     }
 
     fun forceSwitchToCameraScreen() {
         Log.w(TAG, "Force switching to camera screen.")
         cancelInference()
+        stopSpeaking()
         switchToCameraScreen()
     }
     
@@ -408,5 +631,120 @@ class CameraViewModel : ViewModel() {
         
         // Stop inference and clean up model
         modelManager?.cleanup()
+        
+        // Clean up transcription service
+        transcriptionService?.cleanup()
+        
+        // Clean up TTS
+        ttsManager?.cleanup()
+    }
+    
+    /**
+     * Detects if the transcription is likely a default/fallback response from the Whisper model
+     * when it can't properly transcribe the audio.
+     */
+    private fun isLikelyDefaultResponse(transcription: String): Boolean {
+        if (transcription.isEmpty()) return false
+        
+        val lowerTranscription = transcription.lowercase()
+        
+        // Common default responses from Whisper when it can't transcribe properly
+        val defaultResponses = setOf(
+            "thank you for watching",
+            "thank you",
+            "you",
+            "watching",
+            "the",
+            "and",
+            "or",
+            "but",
+            "in",
+            "on",
+            "at",
+            "to",
+            "for",
+            "of",
+            "with",
+            "by",
+            "from",
+            "up",
+            "down",
+            "out",
+            "off",
+            "over",
+            "under",
+            "through",
+            "between",
+            "among",
+            "during",
+            "before",
+            "after",
+            "since",
+            "until",
+            "while",
+            "because",
+            "although",
+            "unless",
+            "if",
+            "then",
+            "else",
+            "when",
+            "where",
+            "why",
+            "how",
+            "what",
+            "who",
+            "which",
+            "that",
+            "this",
+            "these",
+            "those",
+            "a",
+            "an",
+            "the",
+            "is",
+            "are",
+            "was",
+            "were",
+            "be",
+            "been",
+            "being",
+            "have",
+            "has",
+            "had",
+            "do",
+            "does",
+            "did",
+            "will",
+            "would",
+            "could",
+            "should",
+            "may",
+            "might",
+            "can",
+            "must",
+            "shall"
+        )
+        
+        // Check if the transcription is just a single common word
+        if (lowerTranscription in defaultResponses) return true
+        
+        // Check if it's a very short phrase that looks like a default response
+        val words = lowerTranscription.split("\\s+".toRegex())
+        if (words.size <= 3 && words.all { it in defaultResponses }) return true
+        
+        // Check for common patterns that indicate default responses
+        val defaultPatterns = listOf(
+            "thank you for",
+            "thanks for",
+            "thank you",
+            "thanks",
+            "you for",
+            "for watching",
+            "for listening",
+            "for viewing"
+        )
+        
+        return defaultPatterns.any { pattern -> lowerTranscription.contains(pattern) }
     }
 } 

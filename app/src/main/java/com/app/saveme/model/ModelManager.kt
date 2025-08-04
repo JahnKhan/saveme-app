@@ -488,7 +488,7 @@ class ModelManager(private val context: Context) {
             // Create LlmInference engine
             val options = LlmInference.LlmInferenceOptions.builder()
                 .setModelPath(modelFile.absolutePath)
-                .setMaxTokens(1024)
+                .setMaxTokens(4096)
                 .setMaxTopK(40)
                 .setMaxNumImages(if (ModelConfig.SUPPORTS_VISION) 1 else 0) // Set max images based on vision support
                 .build()
@@ -499,9 +499,9 @@ class ModelManager(private val context: Context) {
             val session = LlmInferenceSession.createFromOptions(
                 llmInference,
                 LlmInferenceSession.LlmInferenceSessionOptions.builder()
-                    .setTopK(40)
-                    .setTopP(0.9f)
-                    .setTemperature(0.8f)
+                    .setTopK(10)  // Reduced from 40 for more deterministic output
+                    .setTopP(0.3f)  // Reduced from 0.9f for more deterministic output
+                    .setTemperature(0.2f)  // Reduced from 0.8f for more deterministic output
                     .setGraphOptions(
                         GraphOptions.builder()
                             .setEnableVisionModality(ModelConfig.SUPPORTS_VISION) // Enable vision based on model support
@@ -540,8 +540,16 @@ class ModelManager(private val context: Context) {
             val instance = modelInstance!!
             val currentSession = instance.session
 
-            if (prompt.trim().isNotEmpty()) {
-                currentSession.addQueryChunk(prompt)
+            val fileManager = com.app.saveme.storage.FileManager()
+            val contextText = fileManager.readContext(context)
+            val fullPrompt = if (contextText != null) {
+                "$contextText\n\n$prompt"
+            } else {
+                prompt
+            }
+
+            if (fullPrompt.trim().isNotEmpty()) {
+                currentSession.addQueryChunk(fullPrompt)
             }
 
             if (ModelConfig.SUPPORTS_VISION && imageBitmap != null) {
@@ -617,9 +625,9 @@ class ModelManager(private val context: Context) {
             val newSession = LlmInferenceSession.createFromOptions(
                 instance.engine,
                 LlmInferenceSession.LlmInferenceSessionOptions.builder()
-                    .setTopK(40)
-                    .setTopP(0.9f)
-                    .setTemperature(0.8f)
+                    .setTopK(10)  // Reduced from 40 for more deterministic output
+                    .setTopP(0.3f)  // Reduced from 0.9f for more deterministic output
+                    .setTemperature(0.2f)  // Reduced from 0.8f for more deterministic output
                     .setGraphOptions(
                         GraphOptions.builder()
                             .setEnableVisionModality(ModelConfig.SUPPORTS_VISION)

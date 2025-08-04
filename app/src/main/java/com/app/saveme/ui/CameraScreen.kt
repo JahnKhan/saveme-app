@@ -20,6 +20,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Stop
+import androidx.compose.material.icons.rounded.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -32,6 +33,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -67,6 +69,8 @@ fun CameraScreen(
     val snackbarHostState = remember { SnackbarHostState() }
     
     var captureFunction by remember { mutableStateOf<(() -> Unit)?>(null) }
+    var showDigitalTwinDialog by remember { mutableStateOf(false) }
+    var token by remember { mutableStateOf("") }
     
     // Initialize model manager
     LaunchedEffect(Unit) {
@@ -128,6 +132,9 @@ fun CameraScreen(
                         onRetryDownload = { viewModel.retryModelDownload() },
                         onImportModel = { uri, fileName ->
                             viewModel.importModel(uri, fileName)
+                        },
+                        loadDigitalTwin = { token ->
+                            viewModel.loadDigitalTwin(token, context)
                         }
                     )
                 }
@@ -231,13 +238,82 @@ fun CameraScreen(
                         ChatScreen(
                             capturedImage = uiState.lastCapturedImage,
                             llmResponse = uiState.llmResponse,
+                            userPrompt = uiState.userPrompt,
                             isProcessing = uiState.isProcessingImage,
+                            transcriptionStatus = uiState.transcriptionStatus,
+                            isSpeaking = uiState.isSpeaking,
+                            isTranscribing = uiState.isTranscribing,
+                            isGeneratingResponse = uiState.isGeneratingResponse,
+                            processingPhase = uiState.processingPhase,
                             onNewCaptureClicked = { viewModel.switchToCameraScreen() },
-                            onCancelClicked = { viewModel.cancelInference() }
+                            onCancelClicked = { viewModel.cancelInference() },
+                            onStopSpeaking = { viewModel.stopSpeaking() }
                         )
                     }
                 }
             }
+        }
+        
+        // Digital Twin Load Button - only show when model is loaded
+        if (uiState.modelState == ModelState.LOADED) {
+            FloatingActionButton(
+                onClick = { showDigitalTwinDialog = true },
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(16.dp)
+            ) {
+                Icon(
+                    Icons.Rounded.Add,
+                    contentDescription = "Load Digital Twin"
+                )
+            }
+        }
+        
+        // Digital Twin Dialog
+        if (showDigitalTwinDialog) {
+            AlertDialog(
+                onDismissRequest = { 
+                    showDigitalTwinDialog = false
+                    token = ""
+                },
+                title = { Text("Load Digital Twin") },
+                text = {
+                    Column {
+                        Text("Enter your token to load digital twin context:")
+                        Spacer(modifier = Modifier.height(8.dp))
+                        OutlinedTextField(
+                            value = token,
+                            onValueChange = { token = it },
+                            label = { Text("Token") },
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                    }
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            if (token.isNotEmpty()) {
+                                viewModel.loadDigitalTwin(token, context)
+                                showDigitalTwinDialog = false
+                                token = ""
+                            }
+                        },
+                        enabled = token.isNotEmpty()
+                    ) {
+                        Text("Load")
+                    }
+                },
+                dismissButton = {
+                    TextButton(
+                        onClick = { 
+                            showDigitalTwinDialog = false
+                            token = ""
+                        }
+                    ) {
+                        Text("Cancel")
+                    }
+                }
+            )
         }
         
         // Snackbar for status messages

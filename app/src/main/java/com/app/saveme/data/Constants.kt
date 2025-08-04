@@ -17,8 +17,11 @@ const val IMAGE_FILE_PREFIX = "saveme_image_"
 const val AUDIO_FILE_PREFIX = "saveme_audio_"
 const val FILE_DATE_FORMAT = "yyyyMMdd_HHmmss"
 
-// Dummy transcription text
-const val DUMMY_TRANSCRIPTION = "what is visible?"
+// Transcription constants
+const val TRANSCRIPTION_PROMPT_PREFIX = ""
 
-// Dummy AI response for testing
+// Unified system prompt for all scenarios
+const val SYSTEM_PROMPT = "You are a precise AI assistant. Provide short, direct answers (1-5 sentences maximum). If you cannot answer the user's question based on the available context and image, simply say 'I cannot answer that based on the available information' and stop. Do not elaborate or provide general information. Focus only on what you can definitively determine from the context and image. Be concise and to the point."
+
+// Dummy AI response for testing (fallback)
 const val DUMMY_AI_RESPONSE = "I can see a camera view with various objects in the scene. This is a test response from the AI model to demonstrate that the image analysis is working properly." 

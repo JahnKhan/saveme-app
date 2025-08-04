@@ -73,10 +73,10 @@ data class ModelImportStatus(
 enum class ModelState {
     NOT_DOWNLOADED,
     DOWNLOADING,
-    IMPORTING,
     DOWNLOADED,
-    INITIALIZING,  // Add this state
+    IMPORTING,
     LOADING,
+    INITIALIZING,
     LOADED,
     ERROR
 } 

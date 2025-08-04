@@ -15,9 +15,36 @@ import java.util.Date
 import java.util.Locale
 
 private const val TAG = "FileManager"
+private const val CONTEXT_FILE_NAME = "context.txt"
 
 class FileManager {
-    
+
+    fun saveContext(context: Context, text: String) {
+        try {
+            val file = File(context.filesDir, CONTEXT_FILE_NAME)
+            FileOutputStream(file).use { outputStream ->
+                outputStream.write(text.toByteArray())
+            }
+            Log.d(TAG, "Context saved: ${file.absolutePath}")
+        } catch (e: IOException) {
+            Log.e(TAG, "Failed to save context", e)
+        }
+    }
+
+    fun readContext(context: Context): String? {
+        return try {
+            val file = File(context.filesDir, CONTEXT_FILE_NAME)
+            if (file.exists()) {
+                file.readText()
+            } else {
+                null
+            }
+        } catch (e: IOException) {
+            Log.e(TAG, "Failed to read context", e)
+            null
+        }
+    }
+
     fun saveImage(context: Context, bitmap: Bitmap): File? {
         return try {
             val timestamp = SimpleDateFormat(FILE_DATE_FORMAT, Locale.getDefault()).format(Date())
