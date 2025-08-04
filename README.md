@@ -1,8 +1,9 @@
 # SaveMe - the digital twin rescue app ✨
 
-<div style="text-align: center;">
-  <img src="./docs/logo-342x342.png" alt="SaveMe Logo" style="max-width: 200px; height: auto;"/>
-</div>
+
+<p align="center">
+  <img src="./docs/logo-342x342.png" alt="SaveMe Logo" width="300"/>
+</p>
 
 ## 🚀 Quick Start
 
