@@ -1,11 +1,11 @@
-# SaveMe - the digital twin rescue app ✨
+# SaveMe - the digital twin rescue app
 
 
 <p align="center">
   <img src="./docs/logo-342x342.png" alt="SaveMe Logo" width="300"/>
 </p>
 
-## 🚀 Quick Start
+## Quick Start
 
 ### Setup Process
 
@@ -28,9 +28,7 @@ To get started with SaveMe, follow these simple steps:
 Once setup is complete, SaveMe works entirely offline with your loaded expert context:
 
 1. **Capture & Record**: Press the capture button to take a photo and automatically start audio recording (max 10 seconds)
-2. **AI Processing**: The app processes your input through multiple AI models:
-   - **Whisper**: Transcribes your audio message to text
-   - **Gemma 3n**: Analyzes the image, transcribed text, and context together
+2. **AI Processing**: The app processes your input by transcribing your audio message to text and handing the photo, the transcribed text, the pre-loaded context and a system prompt to **Gemma 3n**.
 3. **Real-time Response**: The AI response is streamed token-by-token and spoken aloud using Android's Text-to-Speech engine
 
 <div style="text-align: center;">
@@ -298,14 +296,14 @@ We chose Jetpack Compose for building the user interface. This modern UI toolkit
 
 For the audio components, we made two key choices:
 
-*   **Whisper for Speech-to-Text:** We chose to use a local Whisper model because we required offline speech recognition capabilities. While MediaPipe GenAI provides excellent support for LLM inference, it currently lacks audio/speech recognition functionality. We even attempted to compile the latest MediaPipe version to get audio support, but encountered missing JNI C++ code that prevented successful integration. Whisper's on-device nature was a perfect fit for our privacy and offline-first requirements. We are looking forward to MediaPipe's planned audio support, which would allow us to replace the Whisper model with a more integrated solution within the MediaPipe ecosystem.
+*   **Whisper for Speech-to-Text:** We chose to use a local open source Whisper model because we required offline speech recognition capabilities. While MediaPipe GenAI provides excellent support for LLM inference, it currently lacks audio/speech recognition functionality. We even attempted to compile the latest MediaPipe version to get audio support, but encountered missing JNI C++ code that prevented successful integration. The open source model Whisper can temporarily fill this gap until MediaPipe's audio support becomes stable, which will allow us to implement an integrated solution within the MediaPipe ecosystem.
 *   **Android's Native TTS for Text-to-Speech:** For voice output, we used Android's built-in Text-to-Speech engine. It is highly efficient, available on all devices without extra dependencies, and our `TTSManager`'s custom streaming layer made it perfectly suitable for handling real-time, token-by-token output from the Gemma model.
 
 These technical choices were instrumental in the successful development of the SaveMe application. By prioritizing on-device AI, performance, and user experience, we were able to create a powerful and innovative application that showcases the potential of multimodal AI on mobile devices. 
 
 ---
 
-## 📱 Requirements & Dependencies
+## Requirements & Dependencies
 
 ### System Requirements
 
