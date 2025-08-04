@@ -45,6 +45,14 @@ This architecture ensures that each component has a single responsibility, makin
 
 A companion website allows companies to manage the knowledge bases for their "Digital Twins." This is where user manuals, safety regulations, and other critical documents are processed and made available for download by the Android application.
 
+---
+<div style="text-align: center;">
+  <img src="./docs/onlinesetup.png" alt="online setup Image 1" style="max-width: 100%; height: auto; transform: scale(1.4); object-fit: cover;"/>
+</div>
+
+---
+
+
 ## 3. Gemma 3n Implementation
 
 The core of the SaveMe application is its use of the Gemma 3n model to provide intelligent, context-aware assistance. The implementation is handled by the `ModelManager` class, which encapsulates all the logic for interacting with the model. More specifically the gemma-3n-E2B-it-int4 model in .task format.
