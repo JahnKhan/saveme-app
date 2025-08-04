@@ -1,8 +1,8 @@
 # SaveMe - the digital twin rescue app ✨
 
-<p align="center">
-  <img src="./docs/logo-342x342.png" alt="SaveMe Logo" width="200"/>
-</p>
+<div style="text-align: center;">
+  <img src="./docs/logo-342x342.png" alt="SaveMe Logo" style="max-width: 200px; height: auto;"/>
+</div>
 
 ## 🚀 Quick Start
 
@@ -40,7 +40,7 @@ Once setup is complete, SaveMe works entirely offline with your loaded expert co
 
 # Architectural details
 
-The SaveMe solution consists of an Android application for in-field use and a companion website for knowledge management. Go to [save-me.app](https://save-me.app/) to upload your context, generate a token and download the android app.
+The SaveMe system is built with a modular architecture that separates the Android application from the web platform. The Android app handles on-device AI processing while the web platform manages knowledge base creation and deployment.
 
 ### 2.1. Android Application
 
