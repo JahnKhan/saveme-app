@@ -1,13 +1,35 @@
-# Project Documentation: SaveMe - the digital twin rescue app
+# SaveMe - the digital twin rescue app ✨
 
+## 🚀 Quick Start
 
-**Overview setup**
-To test the app with our preconfigured context, enter the token "demo" after downloading and installing the app. The app loads the Gemma3n model and the pre-configured context into your phone. After this setup, you still have the option to load a new context by tapping on the button on the top right corner. These steps require an internet connection and are the online setup process. If you want to upload your own context and generate a new token, go to section 2.2. Website for more instructions.
-  <img src="./docs/composite_75.png" alt="Composite Image 1" style="max-width: 100%; height: auto; transform: scale(1.4); object-fit: cover;"/>
+### Setup Process
 
-**Overview usage**
-After the setup the app is ready to be used offline. The model is loaded with your expert context. As soon as you press the image capture button, the app starts also recording an audio with max 10 sec lenght. After that at first the audio message is converted and transcribed using the whisper model. Together with the context, transcribed text and Image the Gemma model is called which delivers the answer. The answer is streamed token by token and also spoken by the Androids in-build Text-To-Speech engine.   
-  <img src="./docs/composite_new.png" alt="Composite Image 2" style="max-width: 100%; height: auto; transform: scale(1.4); object-fit: cover;"/>
+To get started with SaveMe, follow these simple steps:
+
+1. **Download & Install**: Get the app from [save-me.app](https://save-me.app/)
+2. **Enter Demo Token**: Use the token "demo" to test with our pre-configured context
+3. **Model Loading**: The app automatically downloads and loads the Gemma3n model with expert context
+4. **Optional Context Switch**: Tap the button in the top-right corner to load a different context
+
+> **Note**: The initial setup requires an internet connection. For custom contexts and tokens, see [section 2.2](#22-website).
+
+<div style="text-align: center;">
+  <img src="./docs/composite_75.png" alt="SaveMe Setup Process" style="max-width: 100%; height: auto; transform: scale(1.4); object-fit: cover;"/>
+</div>
+
+### Usage Workflow
+
+Once setup is complete, SaveMe works entirely offline with your loaded expert context:
+
+1. **Capture & Record**: Press the capture button to take a photo and automatically start audio recording (max 10 seconds)
+2. **AI Processing**: The app processes your input through multiple AI models:
+   - **Whisper**: Transcribes your audio message to text
+   - **Gemma 3n**: Analyzes the image, transcribed text, and context together
+3. **Real-time Response**: The AI response is streamed token-by-token and spoken aloud using Android's Text-to-Speech engine
+
+<div style="text-align: center;">
+  <img src="./docs/composite_new.png" alt="SaveMe Usage Workflow" style="max-width: 100%; height: auto; transform: scale(1.4); object-fit: cover;"/>
+</div>
 
 
 
