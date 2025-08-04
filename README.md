@@ -13,24 +13,6 @@ To get started with SaveMe, follow these simple steps:
 
 > **Note**: The initial setup requires an internet connection. For custom contexts and tokens, see [section 2.2](#22-website).
 
-#### Custom Context Setup
-
-For production use, you can create your own custom context:
-
-1. **Upload Context**: Go to [save-me.app](https://save-me.app/) and upload your knowledge base (manuals, procedures, etc.)
-2. **Generate Token**: The website processes your context and generates a unique token
-3. **Use Token**: Enter your custom token in the app to download your personalized context
-4. **Private Storage**: Your context is stored securely in our private database and downloaded to your device
-
-> **⚠️ Important**: This is a demo application - do not upload confidential or sensitive data.
-
-#### Model Download
-
-The app downloads the `gemma-3n-E2B-it-int4` model from our server. The model URL is configured in the application code at `app/src/main/java/com/app/saveme/data/ModelConfig.kt`:
-
-```kotlin
-const val DEFAULT_MODEL_URL = "https://save-me.app/llm/gemma-3n-E2B-it-int4.task"
-```
 
 <div style="text-align: center;">
   <img src="./docs/composite_75.png" alt="SaveMe Setup Process" style="max-width: 100%; height: auto; transform: scale(1.4); object-fit: cover;"/>
@@ -79,24 +61,30 @@ graph TD
     C --> E[TranscriptionService<br/>Whisper]
     C --> F[TTSManager<br/>Android TTS]
     
-    subgraph "AI Processing Pipeline"
-        G[Image Capture] --> H[Audio Recording]
-        H --> I[Speech-to-Text<br/>Whisper Model]
-        I --> J[Multimodal Analysis<br/>Gemma 3n]
-        J --> K[Text-to-Speech<br/>Android TTS]
-    end
-    
     style A fill:#e1f5fe
     style B fill:#f3e5f5
     style C fill:#fff3e0
     style D fill:#e8f5e8
     style E fill:#e8f5e8
     style F fill:#e8f5e8
-    style G fill:#fff8e1
-    style H fill:#fff8e1
-    style I fill:#fff8e1
-    style J fill:#fff8e1
-    style K fill:#fff8e1
+```
+
+The AI processing pipeline follows this horizontal flow:
+
+```mermaid
+graph LR
+    A[Image Capture] --> B[Audio Recording]
+    B --> C[Speech-to-Text<br/>Whisper Model]
+    C --> D[Multimodal Analysis<br/>Gemma 3n]
+    D --> E[Text-to-Speech<br/>Android TTS]
+    E --> F[Spoken Response]
+    
+    style A fill:#fff8e1
+    style B fill:#fff8e1
+    style C fill:#fff8e1
+    style D fill:#fff8e1
+    style E fill:#fff8e1
+    style F fill:#e8f5e8
 ```
 
 This architecture ensures that each component has a single responsibility, making the application easier to understand, maintain, and extend. The use of on-device AI models for both speech-to-text and the core LLM ensures that the application is fast, responsive, and can function without a persistent internet connection.
@@ -104,6 +92,25 @@ This architecture ensures that each component has a single responsibility, makin
 ### 2.2. Website
 
 A companion website allows companies to manage the knowledge bases for their "Digital Twins." This is where user manuals, safety regulations, and other critical documents are processed and made available for download by the Android application.
+
+#### Custom Context Setup
+
+For production use, you can create your own custom context:
+
+1. **Upload Context**: Go to [save-me.app](https://save-me.app/) and upload your knowledge base (manuals, procedures, etc.)
+2. **Generate Token**: The website processes your context and generates a unique token
+3. **Use Token**: Enter your custom token in the app to download your personalized context
+4. **Private Storage**: Your context is stored securely in our private database and downloaded to your device
+
+> **⚠️ Important**: This is a demo application - do not upload confidential or sensitive data.
+
+#### Model Download
+
+The app downloads the `gemma-3n-E2B-it-int4` model from our server. The model URL is configured in the application code at `app/src/main/java/com/app/saveme/data/ModelConfig.kt`:
+
+```kotlin
+const val DEFAULT_MODEL_URL = "https://save-me.app/llm/gemma-3n-E2B-it-int4.task"
+```
 
 ---
 <div style="text-align: center;">
