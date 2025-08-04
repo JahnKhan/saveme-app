@@ -95,7 +95,7 @@ A companion website allows companies to manage the knowledge bases for their "Di
 
 #### Custom Context Setup
 
-For production use, you can create your own custom context:
+For custom contexts, you can create your own context:
 
 1. **Upload Context**: Go to [save-me.app](https://save-me.app/) and upload your knowledge base (manuals, procedures, etc.)
 2. **Generate Token**: The website processes your context and generates a unique token
@@ -293,7 +293,7 @@ We chose Jetpack Compose for building the user interface. This modern UI toolkit
 
 For the audio components, we made two key choices:
 
-*   **Whisper for Speech-to-Text:** We chose to use a local Whisper model. While Android provides a built-in speech recognition service, we found that Whisper offered superior accuracy, particularly in potentially noisy field environments. Its on-device nature was also a perfect fit for our privacy and offline-first requirements.
+*   **Whisper for Speech-to-Text:** We chose to use a local Whisper model because we required offline speech recognition capabilities. While MediaPipe GenAI provides excellent support for LLM inference, it currently lacks audio/speech recognition functionality. We even attempted to compile the latest MediaPipe version to get audio support, but encountered missing JNI C++ code that prevented successful integration. Whisper's on-device nature was a perfect fit for our privacy and offline-first requirements, providing superior accuracy particularly in potentially noisy field environments. We are looking forward to MediaPipe's planned audio support, which would allow us to replace the Whisper model with a more integrated solution within the MediaPipe ecosystem.
 *   **Android's Native TTS for Text-to-Speech:** For voice output, we used Android's built-in Text-to-Speech engine. It is highly efficient, available on all devices without extra dependencies, and our `TTSManager`'s custom streaming layer made it perfectly suitable for handling real-time, token-by-token output from the Gemma model.
 
 These technical choices were instrumental in the successful development of the SaveMe application. By prioritizing on-device AI, performance, and user experience, we were able to create a powerful and innovative application that showcases the potential of multimodal AI on mobile devices. 
@@ -323,23 +323,16 @@ These technical choices were instrumental in the successful development of the S
 
 ### Key Dependencies
 
-**UI Framework:**
-- **Jetpack Compose** - Modern declarative UI toolkit
-- **Material 3** - Design system and components
-- **Material Icons Extended** - Additional icon set
-
-**Camera & Media:**
-- **CameraX** - Camera functionality and image capture
-- **MediaPipe LLM Inference API** - On-device AI model execution
-
-**Background Processing:**
-- **WorkManager** - Background model downloads and tasks
-
-**Data Processing:**
-- **Gson** - JSON parsing for configuration and responses
-- **TensorFlow Lite** - Whisper model for speech-to-text
-
-**AI Models:**
-- **Gemma 3n (gemma-3n-E2B-it-int4)** - Core LLM for multimodal analysis
-- **Whisper (tiny.en)** - Speech-to-text transcription
-- **Android TTS** - Text-to-speech output
+| Category | Dependency | Purpose |
+|----------|------------|---------|
+| **UI Framework** | Jetpack Compose | Modern declarative UI toolkit |
+| | Material 3 | Design system and components |
+| | Material Icons Extended | Additional icon set |
+| **Camera & Media** | CameraX | Camera functionality and image capture |
+| | MediaPipe LLM Inference API | On-device AI model execution |
+| **Background Processing** | WorkManager | Background model downloads and tasks |
+| **Data Processing** | Gson | JSON parsing for configuration and responses |
+| | TensorFlow Lite | Whisper model for speech-to-text |
+| **AI Models** | Gemma 3n (gemma-3n-E2B-it-int4) | Core LLM for multimodal analysis |
+| | Whisper (tiny.en) | Speech-to-text transcription |
+| | Android TTS | Text-to-speech output |
