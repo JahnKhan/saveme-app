@@ -303,7 +303,7 @@ These technical choices were instrumental in the successful development of the S
 
 ---
 
-## 📱 Requirements & Dependencies
+## Requirements & Dependencies
 
 ### System Requirements
 
