@@ -1,5 +1,9 @@
 # SaveMe - the digital twin rescue app ✨
 
+<div style="text-align: center;">
+  <img src="./docs/logo-342x342.png" alt="SaveMe Logo" style="max-width: 200px; height: auto;"/>
+</div>
+
 ## 🚀 Quick Start
 
 ### Setup Process
@@ -293,7 +297,7 @@ We chose Jetpack Compose for building the user interface. This modern UI toolkit
 
 For the audio components, we made two key choices:
 
-*   **Whisper for Speech-to-Text:** We chose to use a local Whisper model because we required offline speech recognition capabilities. While MediaPipe GenAI provides excellent support for LLM inference, it currently lacks audio/speech recognition functionality. We even attempted to compile the latest MediaPipe version to get audio support, but encountered missing JNI C++ code that prevented successful integration. Whisper's on-device nature was a perfect fit for our privacy and offline-first requirements, providing superior accuracy particularly in potentially noisy field environments. We are looking forward to MediaPipe's planned audio support, which would allow us to replace the Whisper model with a more integrated solution within the MediaPipe ecosystem.
+*   **Whisper for Speech-to-Text:** We chose to use a local Whisper model because we required offline speech recognition capabilities. While MediaPipe GenAI provides excellent support for LLM inference, it currently lacks audio/speech recognition functionality. We even attempted to compile the latest MediaPipe version to get audio support, but encountered missing JNI C++ code that prevented successful integration. Whisper's on-device nature was a perfect fit for our privacy and offline-first requirements. We are looking forward to MediaPipe's planned audio support, which would allow us to replace the Whisper model with a more integrated solution within the MediaPipe ecosystem.
 *   **Android's Native TTS for Text-to-Speech:** For voice output, we used Android's built-in Text-to-Speech engine. It is highly efficient, available on all devices without extra dependencies, and our `TTSManager`'s custom streaming layer made it perfectly suitable for handling real-time, token-by-token output from the Gemma model.
 
 These technical choices were instrumental in the successful development of the SaveMe application. By prioritizing on-device AI, performance, and user experience, we were able to create a powerful and innovative application that showcases the potential of multimodal AI on mobile devices. 
@@ -313,7 +317,7 @@ These technical choices were instrumental in the successful development of the S
 **Development & Testing:**
 - **Tested Devices:** Google Pixel 7 and Pixel 8
 - **Processing Time:** 30-40 seconds to process input and generate the first token
-- **Performance Note:** Processing time may vary based on device specifications and model complexity
+- **Performance Note:** Processing time may vary based on device specifications
 
 **Permissions:**
 - **Camera:** For image capture functionality
@@ -327,7 +331,6 @@ These technical choices were instrumental in the successful development of the S
 |----------|------------|---------|
 | **UI Framework** | Jetpack Compose | Modern declarative UI toolkit |
 | | Material 3 | Design system and components |
-| | Material Icons Extended | Additional icon set |
 | **Camera & Media** | CameraX | Camera functionality and image capture |
 | | MediaPipe LLM Inference API | On-device AI model execution |
 | **Background Processing** | WorkManager | Background model downloads and tasks |
