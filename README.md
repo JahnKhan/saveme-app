@@ -161,7 +161,7 @@ fun loadModel(): Boolean {
 
 This code snippet demonstrates several key aspects of the implementation:
 
-*   **Dynamic Vision Support:** The application dynamically enables vision support based on the loaded model. The `ModelConfig.SUPPORTS_VISION` flag, which is set by inspecting the model's filename, allows the app to seamlessly switch between vision-enabled and text-only models. The current setup of the app works only with multimodal models with vision support. 
+*   **Legacy Vision Support Detection:** The application includes dynamic vision support detection based on the loaded model's filename. The `ModelConfig.SUPPORTS_VISION` flag is set by inspecting keywords in the model filename (like "gemma-3n", "vision", "E2B"). This feature was implemented in earlier versions to support importing different models, but the current demo version only supports the `gemma-3n-E2B-it-int4` model with vision capabilities. The main screen is the camera screen, which requires vision support to capture and analyze images. While the code could theoretically support text-only models, this feature is not implemented in the current UI.
 *   **Model Configuration:** The `LlmInferenceOptions` are used to configure the model, setting parameters like the maximum number of tokens and the number of images that can be processed.
 *   **Session Configuration:** The `LlmInferenceSessionOptions` are used to control the model's output. The `topK`, `topP`, and `temperature` parameters are tuned to produce more deterministic and coherent responses.
 
@@ -253,7 +253,7 @@ This end-to-end streaming pipeline ensures that the user starts receiving feedba
 
 **Solution:** The multi-modal implementation of the app closely followed the great project "Google AI Edge Gallery," which already provided a strong example for combined image-text input. The MediaPipe GenAI library provides the core built-in support for multimodal input, which our `ModelManager` leverages by:
 
-*   **Dynamically Enabling Vision:** The app detects whether the loaded model supports vision and configures the `LlmInference` engine accordingly. The support of non vision models would mean, that the input is text-only. That is currently not implemented in our mvp's ui. Our main screen is the camera screen that requires a multimodal model with vision support. If the customer requires much faster responses even without image input, this feature could be implemented.
+*   **Legacy Vision Detection:** The app includes code to detect whether the loaded model supports vision and configures the `LlmInference` engine accordingly. This feature was implemented in earlier versions to support different model types, but the current demo version only supports the `gemma-3n-E2B-it-int4` model with vision capabilities. The main screen is the camera screen that requires a multimodal model with vision support. While the code could theoretically support text-only models for faster responses without image input, this feature is not implemented in the current UI.
 
 *   **Combining Inputs:** The `generateResponseStreaming` function takes both a text prompt and an image, and it passes them to the model for processing.
 
@@ -300,19 +300,46 @@ These technical choices were instrumental in the successful development of the S
 
 ---
 
+## 📱 Requirements & Dependencies
 
-The app requires:
--   **Android API Level 31+** (Android 12+)
--   **Target SDK 36** (Android 14+)
--   **Camera and Microphone permissions**
--   **Internet permission** (for model downloads only)
--   **At least 4GB of available storage** (for the AI model)
+### System Requirements
 
-Key dependencies:
--   **Jetpack Compose** for the UI
--   **CameraX** for camera functionality
--   **MediaPipe LLM Inference API** for on-device AI
--   **WorkManager** for background tasks
--   **Material 3** for UI components
--   **Material Icons Extended** for additional icons
--   **Gson** for JSON parsing
+**Android Device:**
+- **Minimum API Level:** 31+ (Android 12+)
+- **Target SDK:** 36 (Android 14+)
+- **Storage:** At least 4GB available space (for AI model download)
+- **RAM:** Recommended 6GB+ for optimal performance
+
+**Development & Testing:**
+- **Tested Devices:** Google Pixel 7 and Pixel 8
+- **Processing Time:** 30-40 seconds to process input and generate the first token
+- **Performance Note:** Processing time may vary based on device specifications and model complexity
+
+**Permissions:**
+- **Camera:** For image capture functionality
+- **Microphone:** For audio recording and speech input
+- **Internet:** For initial model download and context setup only
+- **Storage:** For saving captured images and audio files
+
+### Key Dependencies
+
+**UI Framework:**
+- **Jetpack Compose** - Modern declarative UI toolkit
+- **Material 3** - Design system and components
+- **Material Icons Extended** - Additional icon set
+
+**Camera & Media:**
+- **CameraX** - Camera functionality and image capture
+- **MediaPipe LLM Inference API** - On-device AI model execution
+
+**Background Processing:**
+- **WorkManager** - Background model downloads and tasks
+
+**Data Processing:**
+- **Gson** - JSON parsing for configuration and responses
+- **TensorFlow Lite** - Whisper model for speech-to-text
+
+**AI Models:**
+- **Gemma 3n (gemma-3n-E2B-it-int4)** - Core LLM for multimodal analysis
+- **Whisper (tiny.en)** - Speech-to-text transcription
+- **Android TTS** - Text-to-speech output
