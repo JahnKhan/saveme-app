@@ -1,12 +1,15 @@
 # Project Documentation: SaveMe - the digital twin rescue app
 
----
-<div style="text-align: center;">
-  <img src="./docs/composite_75.png" alt="Composite Image 1" style="max-width: 100%; height: auto; transform: scale(1.4); object-fit: cover;"/>
-  <img src="./docs/composite_new.png" alt="Composite Image 2" style="max-width: 100%; height: auto; transform: scale(1.4); object-fit: cover;"/>
-</div>
 
----
+**Overview setup**
+To test the app with our preconfigured context, enter the token "demo" after downloading and installing the app. The app loads the Gemma3n model and the pre-configured context into your phone. After this setup, you still have the option to load a new context by tapping on the button on the top right corner. These steps require an internet connection and are the online setup process. If you want to upload your own context and generate a new token, go to section 2.2. Website for more instructions.
+  <img src="./docs/composite_75.png" alt="Composite Image 1" style="max-width: 100%; height: auto; transform: scale(1.4); object-fit: cover;"/>
+
+**Overview usage**
+After the setup the app is ready to be used offline. The model is loaded with your expert context. As soon as you press the image capture button, the app starts also recording an audio with max 10 sec lenght. After that at first the audio message is converted and transcribed using the whisper model. Together with the context, transcribed text and Image the Gemma model is called which delivers the answer. The answer is streamed token by token and also spoken by the Androids in-build Text-To-Speech engine.   
+  <img src="./docs/composite_new.png" alt="Composite Image 2" style="max-width: 100%; height: auto; transform: scale(1.4); object-fit: cover;"/>
+
+
 
 # Architectural details
 
