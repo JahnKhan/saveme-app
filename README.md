@@ -1,4 +1,4 @@
-# Project Documentation: Cursor Agent Android App
+# Project Documentation:  Android App
 
 ---
 
