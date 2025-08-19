@@ -338,3 +338,7 @@ These technical choices were instrumental in the successful development of the S
 | **AI Models** | Gemma 3n (gemma-3n-E2B-it-int4) | Core LLM for multimodal analysis |
 | | Whisper (tiny.en) | Speech-to-text transcription |
 | | Android TTS | Text-to-speech output |
+
+# License
+
+This project is licensed under the [Creative Commons Attribution 4.0 International License (CC BY 4.0)](https://creativecommons.org/licenses/by/4.0/).
